@@ -1,0 +1,51 @@
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id        Int               @id @default(autoincrement())
+  sessions  Session[]         // Sessions associated with the user
+  accounts  ProviderAccount[] // Authentication accounts linked to the user
+  image     String?            // Binary data for the user's profile image
+  name      String            // User's display name
+}
+
+model Session {
+  id               String   @id // Unique session identifier (e.g., UUID or random string)
+  userId           Int      // Foreign key to the User model
+  expiresAt        DateTime // Session expiration time
+  providerAccountId Int     // Foreign key to the ProviderAccount that created this session
+
+  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade) 
+                                     // Relationship to the User model
+  providerAccount  ProviderAccount  @relation(fields: [providerAccountId], references: [id], onDelete: Cascade) 
+                                     // Relationship to the ProviderAccount that generated this session
+
+  @@index([providerAccountId])      // Index on providerAccountId for optimized queries
+}
+
+model ProviderAccount {
+  id               Int         @id @default(autoincrement()) // Unique identifier for the ProviderAccount
+  provider         String      // Name of the provider (e.g., "google", "facebook")
+  oauthProviderId  String      // ID assigned by the provider for this account
+                               // NOTE: This uniquely identifies the account at the provider level.
+  userId           Int         // Foreign key to the User model
+  imageUrl         String?     // URL to the provider's profile image for the account
+  accessToken      String?     // Access token for the provider's APIs (if applicable)
+  refreshToken     String?     // Refresh token for the provider's APIs (if applicable)
+  expiresAt        DateTime?   // Expiration time for the access token (if applicable)
+  email            String      // Email address associated with the provider account
+
+  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade) 
+                                // Relationship to the User model
+  sessions         Session[]   // Reverse relation to the Session model
+
+  @@unique([provider, oauthProviderId]) // Ensures each provider-oauthProviderId combination is unique
+}
+
