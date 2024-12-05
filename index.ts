@@ -1,1 +1,1 @@
-export type { ApiRoutes } from "./server/src/index";
+export type { ApiRoutes } from "./backend/src/index";
