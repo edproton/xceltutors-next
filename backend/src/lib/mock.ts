@@ -26,6 +26,7 @@ export type Booking = {
   status: BookingStatus;
   payment?: {
     sessionId: string;
+    sessionUrl?: string;
     paymentIntentId?: string;
     chargeId?: string;
     metadata?: Record<string, string>;

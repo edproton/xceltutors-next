@@ -11,9 +11,9 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY);
  * @returns The Stripe checkout session URL.
  */
 export const createOrRegenerateStripeSessionForBooking = async (
-  booking: Booking,
-  amount: number
-): Promise<{ sessionUrl: string }> => {
+  booking: Booking
+): Promise<{ sessionUrl: string; sessionId: string }> => {
+  const amount = 10;
   try {
     if (!booking) {
       throw new Error("Booking not found");
@@ -39,7 +39,10 @@ export const createOrRegenerateStripeSessionForBooking = async (
         existingSession.url
       ) {
         // Return the existing session if valid
-        return { sessionUrl: existingSession.url };
+        return {
+          sessionUrl: existingSession.url,
+          sessionId: existingSession.id,
+        };
       }
     }
 
@@ -65,6 +68,9 @@ export const createOrRegenerateStripeSessionForBooking = async (
           quantity: 1,
         },
       ],
+      metadata: {
+        bookingId: booking.id,
+      },
       customer_email: booking.participantsUsernames[0] + "@example.com",
       customer_creation: "if_required",
       success_url: `${env.FRONTEND_URL}/bookings?session_id={CHECKOUT_SESSION_ID}&bookingId=${booking.id}`,
@@ -75,7 +81,7 @@ export const createOrRegenerateStripeSessionForBooking = async (
       throw new Error("Failed to create Stripe checkout session");
     }
 
-    return { sessionUrl: stripeSession.url };
+    return { sessionUrl: stripeSession.url, sessionId: stripeSession.id };
   } catch (error) {
     console.error("Error creating or regenerating Stripe session:", error);
     throw new Error("Failed to create Stripe checkout session");
@@ -105,5 +111,30 @@ export const createStripeRefund = async (booking: Booking): Promise<void> => {
   } catch (error) {
     console.error("Error processing Stripe refund:", error);
     throw new Error("Failed to process refund");
+  }
+};
+
+export const cancelStripePaymentIntent = async (
+  booking: Booking
+): Promise<void> => {
+  try {
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (!booking.payment?.sessionId) {
+      throw new Error("No session ID found for booking");
+    }
+
+    const paymentIntent = await stripe.checkout.sessions.expire(
+      booking.payment.sessionId
+    );
+
+    if (!paymentIntent) {
+      throw new Error("Failed to cancel payment intent");
+    }
+  } catch (error) {
+    console.error("Error cancelling Stripe payment intent:", error);
+    throw new Error("Failed to cancel payment intent");
   }
 };

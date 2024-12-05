@@ -3,6 +3,7 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { BookingStatus, fakeDatabase, BookingType, Booking } from "@/lib/mock";
 import {
+  cancelStripePaymentIntent,
   createOrRegenerateStripeSessionForBooking,
   createStripeRefund,
 } from "@/lib/stripe";
@@ -368,8 +369,24 @@ export const bookingRoute = new Hono()
         );
       }
 
+      if (!booking.payment) {
+        return c.json(
+          {
+            error: "Booking has no payment information.",
+            code: "NO_PAYMENT_INFO",
+          },
+          400
+        );
+      }
+
       // Update booking status to canceled
       booking.status = BookingStatus.CANCELED;
+      booking.payment = {
+        sessionId: booking.payment.sessionId,
+      };
+
+      // Inform stripe to cancel the payment intent
+      await cancelStripePaymentIntent(booking);
 
       return c.json(
         {
@@ -519,13 +536,12 @@ export const bookingRoute = new Hono()
 
       // Trigger payment flow for lesson bookings
       if (booking.type === BookingType.LESSON) {
-        const paymentData = await createOrRegenerateStripeSessionForBooking(
-          booking,
-          1000
-        ); // Example amount: $10.00
+        const paymentData =
+          await createOrRegenerateStripeSessionForBooking(booking); // Example amount: $10.00
 
         booking.payment = {
-          sessionId: paymentData.sessionUrl, // Store the session URL in the booking
+          sessionId: paymentData.sessionId, // Store the session URL in the booking
+          sessionUrl: paymentData.sessionUrl,
         };
 
         // Store the session URL in the booking
