@@ -2,7 +2,10 @@ import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { BookingStatus, fakeDatabase, BookingType, Booking } from "@/lib/mock";
-import { createOrRegenerateStripeSessionForBooking } from "@/lib/stripe";
+import {
+  createOrRegenerateStripeSessionForBooking,
+  createStripeRefund,
+} from "@/lib/stripe";
 
 // Zod schema for booking validation
 const createBookingSchema = z.object({
@@ -377,6 +380,69 @@ export const bookingRoute = new Hono()
       );
     } catch (error) {
       console.error("Error canceling booking:", error);
+      return c.json(
+        {
+          error: "An unexpected error occurred.",
+          code: "INTERNAL_SERVER_ERROR",
+        },
+        500
+      );
+    }
+  })
+  .patch("/:id/cancel/refund", async (c) => {
+    try {
+      // Extract data
+      const id = c.req.param("id");
+      const username = c.req.header("x-username");
+      if (!username) {
+        return c.json(
+          {
+            error: "Username is required in the header.",
+            code: "MISSING_USERNAME",
+          },
+          400
+        );
+      }
+
+      // Find the booking
+      const bookingIndex = fakeDatabase.findIndex(
+        (booking) => booking.id === parseInt(id, 10)
+      );
+
+      if (bookingIndex === -1) {
+        return c.json(
+          { error: "Booking not found.", code: "BOOKING_NOT_FOUND" },
+          404
+        );
+      }
+
+      const booking = fakeDatabase[bookingIndex];
+
+      // Validate booking status - only paid bookings can be refunded
+      if (booking.status !== BookingStatus.SCHEDULED) {
+        return c.json(
+          {
+            error: `The booking status is ${booking.status}. Only ${BookingStatus.SCHEDULED} bookings can be refunded.`,
+            code: "INVALID_STATUS",
+          },
+          400
+        );
+      }
+
+      // Process refund through Stripe
+      if (booking.payment?.chargeId || booking.payment?.paymentIntentId) {
+        await createStripeRefund(booking);
+      }
+
+      return c.json(
+        {
+          message: "Booking refunded in process.",
+          booking,
+        },
+        200
+      );
+    } catch (error) {
+      console.error("Error refunding booking:", error);
       return c.json(
         {
           error: "An unexpected error occurred.",

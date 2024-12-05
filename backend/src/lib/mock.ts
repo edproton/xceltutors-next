@@ -6,6 +6,9 @@ export enum BookingStatus {
   SCHEDULED = "SCHEDULED",
   CANCELED = "CANCELED",
   COMPLETED = "COMPLETED",
+  REFUNDED = "REFUNDED",
+  AWAITING_REFUND = "AWAITING_REFUND",
+  REFUND_FAILED = "REFUND_FAILED",
 }
 
 export enum BookingType {
@@ -23,6 +26,9 @@ export type Booking = {
   status: BookingStatus;
   payment?: {
     sessionId: string;
+    paymentIntentId?: string;
+    chargeId?: string;
+    metadata?: Record<string, string>;
   };
 };
 

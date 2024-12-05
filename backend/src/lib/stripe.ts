@@ -81,3 +81,29 @@ export const createOrRegenerateStripeSessionForBooking = async (
     throw new Error("Failed to create Stripe checkout session");
   }
 };
+
+export const createStripeRefund = async (booking: Booking): Promise<void> => {
+  try {
+    if (!booking) {
+      throw new Error("Booking not found");
+    }
+
+    if (!booking.payment?.chargeId) {
+      throw new Error("No charge ID found for booking");
+    }
+
+    const refund = await stripe.refunds.create({
+      payment_intent: booking.payment.paymentIntentId,
+      metadata: {
+        bookingId: booking.id,
+      },
+    });
+
+    if (!refund) {
+      throw new Error("Failed to process refund");
+    }
+  } catch (error) {
+    console.error("Error processing Stripe refund:", error);
+    throw new Error("Failed to process refund");
+  }
+};
