@@ -5,6 +5,7 @@ import { cors } from "hono/cors";
 import { expensesRoute } from "./routes/expeses";
 import { env } from "@/config";
 import { authRoute } from "./routes/auth";
+import { bookingRoute } from "./routes/bookings";
 
 const API_VERSION = "v1";
 const corsOrigin = env.CORS_ORIGIN;
@@ -26,7 +27,8 @@ const apiRoutes = app
   .basePath(`/api`)
   .route("/auth", authRoute)
   .basePath(`/${API_VERSION}`)
-  .route("/expenses", expensesRoute);
+  .route("/expenses", expensesRoute)
+  .route("/bookings", bookingRoute);
 
 app.use("*", async (c, next) => {
   await next();

@@ -1,4 +1,3 @@
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -14,6 +13,10 @@ model User {
   accounts  ProviderAccount[] // Authentication accounts linked to the user
   image     String?            // Binary data for the user's profile image
   name      String            // User's display name
+
+  // Booking relations
+  hostedBookings    Booking[] @relation("BookingHost")
+  joinedBookings    Booking[] @relation("BookingParticipants")
 }
 
 model Session {
@@ -49,3 +52,57 @@ model ProviderAccount {
   @@unique([provider, oauthProviderId]) // Ensures each provider-oauthProviderId combination is unique
 }
 
+enum BookingType {
+  FREE_MEETING
+  LESSON
+}
+
+enum BookingStatus {
+  AWAITING_TUTOR_CONFIRMATION
+  AWAITING_STUDENT_CONFIRMATION 
+  AWAITING_PAYMENT
+  PAYMENT_FAILED
+  SCHEDULED
+  CANCELED
+  COMPLETED
+}
+
+enum RecurrencePattern {
+  NONE       // Default for free meetings or one-time bookings
+  DAILY
+  WEEKLY
+  BIWEEKLY
+  MONTHLY
+  CUSTOM
+}
+
+// Booking Model
+model Booking {
+  id            String          @id @default(cuid())
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+  title         String
+  description   String?
+  startTime     DateTime
+  endTime       DateTime
+  
+  // Enum fields
+  type          BookingType
+  status        BookingStatus
+
+  // Host relationship
+  hostId        Int
+  host          User            @relation("BookingHost", fields: [hostId], references: [id])
+  
+  // Participants many-to-many relationship
+  participants  User[]          @relation("BookingParticipants")
+  
+  // Recurring booking fields
+  recurrence    RecurrencePattern @default(NONE) // Indicates if the booking is recurring
+  recurrenceEnd DateTime?        // Optional end date for the recurrence
+  parentBookingId String?        // Reference to the original booking for recurring instances
+  parentBooking  Booking?        @relation("ParentBooking", fields: [parentBookingId], references: [id])
+  recurringInstances Booking[]   @relation("ParentBooking")
+
+  @@index([hostId])
+}
