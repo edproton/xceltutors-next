@@ -2,7 +2,7 @@ import { z } from "zod";
 
 const configSchema = z.object({
   NODE_ENV: z.enum(["development", "production", "test"]),
-  CORS_ORIGIN: z.string().url(),
+  FRONTEND_URL: z.string().url(),
   ORIGIN: z.string(),
   PORT: z.coerce
     .number()
@@ -18,6 +18,9 @@ const configSchema = z.object({
   AWS_SECRET_ACCESS_KEY: z.string().min(1),
   AWS_REGION: z.string().min(1),
   AWS_BUCKET_NAME: z.string().min(1),
+  STRIPE_PUBLISHABLE_KEY: z.string().min(1),
+  STRIPE_SECRET_KEY: z.string().min(1),
+  STRIPE_WEBHOOK_SECRET: z.string().min(1),
 });
 
 export const env = configSchema.parse(process.env);

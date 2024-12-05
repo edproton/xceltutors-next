@@ -1,34 +1,8 @@
 import { Hono } from "hono";
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-
-enum BookingStatus {
-  AWAITING_TUTOR_CONFIRMATION = "AWAITING_TUTOR_CONFIRMATION",
-  AWAITING_STUDENT_CONFIRMATION = "AWAITING_STUDENT_CONFIRMATION",
-  AWAITING_PAYMENT = "AWAITING_PAYMENT",
-  PAYMENT_FAILED = "PAYMENT_FAILED",
-  SCHEDULED = "SCHEDULED",
-  CANCELED = "CANCELED",
-  COMPLETED = "COMPLETED",
-}
-
-enum BookingType {
-  FREE_MEETING = "FREE_MEETING",
-  LESSON = "LESSON",
-}
-
-type Booking = {
-  id: number;
-  startTime: string;
-  endTime: string;
-  hostUsername: string;
-  participantsUsernames: string[];
-  type: BookingType;
-  status: BookingStatus;
-};
-
-// Fake database
-const fakeDatabase: Booking[] = [];
+import { BookingStatus, fakeDatabase, BookingType, Booking } from "@/lib/mock";
+import { createOrRegenerateStripeSessionForBooking } from "@/lib/stripe";
 
 // Zod schema for booking validation
 const createBookingSchema = z.object({
@@ -109,7 +83,8 @@ export const bookingRoute = new Hono()
         (booking) =>
           booking.hostUsername === hostUsername &&
           new Date(booking.startTime) < endTime &&
-          new Date(booking.endTime) > new Date(startTime)
+          new Date(booking.endTime) > new Date(startTime) &&
+          validFreeMeetingStatuses.includes(booking.status)
       );
 
       if (isHostBusy) {
@@ -476,7 +451,19 @@ export const bookingRoute = new Hono()
           ? BookingStatus.SCHEDULED
           : BookingStatus.AWAITING_PAYMENT;
 
-      // trigger payment flow for lesson bookings
+      // Trigger payment flow for lesson bookings
+      if (booking.type === BookingType.LESSON) {
+        const paymentData = await createOrRegenerateStripeSessionForBooking(
+          booking,
+          1000
+        ); // Example amount: $10.00
+
+        booking.payment = {
+          sessionId: paymentData.sessionUrl, // Store the session URL in the booking
+        };
+
+        // Store the session URL in the booking
+      }
 
       return c.json(
         {

@@ -6,16 +6,16 @@ import { expensesRoute } from "./routes/expeses";
 import { env } from "@/config";
 import { authRoute } from "./routes/auth";
 import { bookingRoute } from "./routes/bookings";
+import { paymentRoute } from "./routes/payments";
 
 const API_VERSION = "v1";
-const corsOrigin = env.CORS_ORIGIN;
 
 const app = new Hono();
 app.use(logger());
 app.use(
   "*",
   cors({
-    origin: corsOrigin,
+    origin: env.FRONTEND_URL,
     allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["X-API-Version"],
@@ -28,7 +28,8 @@ const apiRoutes = app
   .route("/auth", authRoute)
   .basePath(`/${API_VERSION}`)
   .route("/expenses", expensesRoute)
-  .route("/bookings", bookingRoute);
+  .route("/bookings", bookingRoute)
+  .route("/payments", paymentRoute);
 
 app.use("*", async (c, next) => {
   await next();

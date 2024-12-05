@@ -14,5 +14,8 @@
   "workspaces": [
     "frontend",
     "backend"
-  ]
+  ],
+  "dependencies": {
+    "stripe": "^17.4.0"
+  }
 }
