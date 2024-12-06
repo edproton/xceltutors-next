@@ -98,7 +98,6 @@ export class BookingService {
     paymentInfo?: PaymentInfo
   ): Promise<Booking> {
     const booking = await this.getBooking(bookingId);
-    booking.status = newStatus;
 
     if (booking.payment && paymentInfo) {
       booking.payment = {
@@ -107,7 +106,20 @@ export class BookingService {
       };
     }
 
-    return await this.bookingRepository.saveBooking(booking);
+    console.log("Updating booking status to", newStatus);
+    console.log("Payment info", booking.id);
+    const updatedBooking = await this.bookingRepository.updateBookingStatus(
+      bookingId,
+      newStatus
+    );
+
+    if (!updatedBooking) {
+      throw new Error(
+        "Failed to update booking status. The booking may not exist."
+      );
+    }
+
+    return updatedBooking;
   }
 
   // Reschedule a booking
@@ -251,7 +263,6 @@ export class BookingService {
 
   async requestRefund(id: number) {
     const booking = await this.bookingRepository.getBookingById(id);
-
     if (!booking) {
       return { error: "Booking not found.", code: "BOOKING_NOT_FOUND" };
     }
@@ -330,6 +341,7 @@ export class BookingService {
         await this.stripeService.createOrRegenerateStripeSessionForBooking(
           booking
         );
+
       booking.payment = {
         sessionId: paymentData.sessionId,
         sessionUrl: paymentData.sessionUrl,
@@ -337,7 +349,10 @@ export class BookingService {
     }
 
     // Save updated booking
-    await this.bookingRepository.saveBooking(booking);
+    await this.bookingRepository.updateBookingStatus(
+      booking.id,
+      booking.status
+    );
 
     return {
       message: "Booking confirmed successfully.",

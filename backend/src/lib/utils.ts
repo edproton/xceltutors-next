@@ -1,5 +1,3 @@
-import { createHash } from "crypto";
-
 export function generateRandomString(length = 16): string {
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
@@ -8,6 +6,17 @@ export function generateRandomString(length = 16): string {
   );
 }
 
-export function hashString(input: string): string {
-  return createHash("sha256").update(input).digest("hex");
+export async function hashString(input: string): Promise<string> {
+  const msgBuffer = new TextEncoder().encode(input);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", msgBuffer);
+  return Array.from(new Uint8Array(hashBuffer))
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
+}
+
+// Fixed sync version using Bun's native crypto
+export function hashStringSync(input: string): string {
+  const buffer = new TextEncoder().encode(input);
+  const hash = Bun.hash(buffer);
+  return hash.toString(16);
 }

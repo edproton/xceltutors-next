@@ -19,8 +19,28 @@ export interface IBookingRepository {
   ): Promise<boolean>;
 }
 
+const database: Booking[] = [
+  {
+    id: 1,
+    startTime: "2024-12-10T07:50:00Z",
+    endTime: "2024-12-10T08:50:00Z",
+    hostUsername: "TutorJane",
+    participantsUsernames: ["JohnDoe"],
+    status: BookingStatus.SCHEDULED,
+    type: BookingType.FREE_MEETING,
+  },
+  {
+    id: 2,
+    startTime: "2024-12-10T12:50:00Z",
+    endTime: "2024-12-10T13:50:00Z",
+    hostUsername: "TutorJane",
+    participantsUsernames: ["JohnDoe"],
+    status: BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+    type: BookingType.LESSON,
+  },
+];
 export class BookingRepository implements IBookingRepository {
-  private database: Booking[] = [];
+  private database: Booking[] = database;
 
   async saveBooking(booking: Booking): Promise<Booking> {
     booking.id = this.database.length + 1;
@@ -72,11 +92,15 @@ export class BookingRepository implements IBookingRepository {
     status: BookingStatus
   ): Promise<Booking | undefined> {
     const booking = await this.getBookingById(id);
+
+    console.log("repository");
+    console.log(booking);
     if (booking) {
-      booking.status = status; // Update the status
-      return this.saveBooking(booking); // Save the updated booking
+      booking.status = status;
+
+      return booking;
     }
 
-    return undefined; // If booking not found
+    return undefined;
   }
 }

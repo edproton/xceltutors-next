@@ -1,7 +1,5 @@
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
-import { Env, h } from "@/lib/facotry";
-import { authMiddleware } from "@/middlewares/auth";
 import { Hono } from "hono";
 
 // Zod schema for booking validation
@@ -19,29 +17,28 @@ const recheduleBookingSchema = z.object({
     .datetime({ message: "Invalid startTime. Must be ISO 8601 format." }),
 });
 
-const publicRoutes = new Hono<Env>().get("/", async (c) => {
-  const bookings = await c.var.bookingService.getAllBookings();
+export const bookingRoutes = new Hono()
+  .get("/", async (c) => {
+    const bookings = await c.var.dependencies.bookingService.getAllBookings();
 
-  return c.json(
-    {
-      bookings,
-    },
-    200
-  );
-});
-
-export const privateRoutes = new Hono<Env>()
-  .use(authMiddleware)
+    return c.json(
+      {
+        bookings,
+      },
+      200
+    );
+  })
+  // .use(authMiddleware)
   .get("/:id{[0-9]+}", async (c) => {
     const id = parseInt(c.req.param("id"));
-    const booking = await c.var.bookingService.getBooking(id);
+    const booking = await c.var.dependencies.bookingService.getBooking(id);
 
     return c.json(booking, 200);
   })
   .post("/", zValidator("json", createBookingSchema), async (c) => {
     const { startTime, username, hostUsername } = c.req.valid("json");
 
-    const newBooking = await c.var.bookingService.createBooking(
+    const newBooking = await c.var.dependencies.bookingService.createBooking(
       startTime,
       username,
       hostUsername
@@ -73,11 +70,12 @@ export const privateRoutes = new Hono<Env>()
         );
       }
 
-      const updatedBooking = await c.var.bookingService.rescheduleBooking(
-        id,
-        startTime,
-        username
-      );
+      const updatedBooking =
+        await c.var.dependencies.bookingService.rescheduleBooking(
+          id,
+          startTime,
+          username
+        );
 
       return c.json(
         {
@@ -103,14 +101,17 @@ export const privateRoutes = new Hono<Env>()
     }
 
     // Call the service to cancel the booking
-    const result = await c.var.bookingService.cancelBooking(id, username);
+    const result = await c.var.dependencies.bookingService.cancelBooking(
+      id,
+      username
+    );
 
     return c.json(result, 200);
   })
   .patch("/:id{[0-9]+}/cancel/refund", async (c) => {
     const id = parseInt(c.req.param("id"));
 
-    const result = await c.var.bookingService.requestRefund(id);
+    const result = await c.var.dependencies.bookingService.requestRefund(id);
 
     return c.json(result, 200);
   })
@@ -128,11 +129,10 @@ export const privateRoutes = new Hono<Env>()
       );
     }
 
-    const result = await c.var.bookingService.confirmBooking(id, username);
+    const result = await c.var.dependencies.bookingService.confirmBooking(
+      id,
+      username
+    );
 
     return c.json(result, 200);
   });
-
-export const bookingRoutes = h
-  .route("/", publicRoutes)
-  .route("/", privateRoutes);

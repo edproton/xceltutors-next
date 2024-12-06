@@ -4,7 +4,6 @@ import { stripe } from "@/lib/stripe";
 import { Context, Hono } from "hono";
 import { Stripe } from "stripe";
 import { BookingService } from "@/services/bookingService";
-import { Env } from "@/lib/facotry";
 
 // Constants and Types
 enum WebhookEventType {
@@ -121,7 +120,7 @@ export class WebhookHandlers {
     const bookingId = parseInt(event.metadata.bookingId);
     const booking = await this.bookingsService.getBooking(bookingId);
 
-    if (booking.status !== BookingStatus.SCHEDULED) {
+    if (booking.status !== BookingStatus.AWAITING_REFUND) {
       throw new BookingError("Booking not in scheduled state");
     }
 
@@ -149,7 +148,7 @@ export class WebhookHandlers {
 }
 
 // Webhook Handler
-export async function webhook(c: Context<Env>): Promise<Response> {
+export async function webhook(c: Context): Promise<Response> {
   const signature = c.req.header("stripe-signature");
   if (!signature) {
     return c.text("Missing stripe signature", 400);
@@ -157,6 +156,7 @@ export async function webhook(c: Context<Env>): Promise<Response> {
 
   try {
     const webhookHandlers = c.var.webhookHandlers;
+
     const body = await c.req.text();
     const event = await stripe.webhooks.constructEventAsync(
       body,
@@ -204,10 +204,9 @@ export async function webhook(c: Context<Env>): Promise<Response> {
   } catch (err) {
     const errorMessage =
       err instanceof Error ? err.message : "Internal server error";
-    console.error(`Webhook Error: ${errorMessage}`);
+
     return c.text(errorMessage, 400);
   }
 }
 
-export const paymentRoute = new Hono();
-paymentRoute.post("/webhook", webhook);
+export const paymentRoute = new Hono().post("/webhook", webhook);

@@ -6,11 +6,11 @@ import { authRoute } from "./routes/auth";
 import { bookingRoutes } from "./routes/bookings";
 import { paymentRoute } from "./routes/payments";
 import { diMiddleware } from "./middlewares/di";
-import { h } from "@/lib/facotry";
+import { Hono } from "hono";
 
 const API_VERSION = "v1";
 
-const app = h
+const app = new Hono()
   .use(diMiddleware)
   .use(logger())
   .use(async (c, next) => {
