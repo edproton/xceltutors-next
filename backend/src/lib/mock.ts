@@ -32,24 +32,3 @@ export type Booking = {
     metadata?: Record<string, string>;
   };
 };
-
-export const fakeDatabase: Booking[] = [
-  {
-    id: 1,
-    startTime: "2021-07-01T10:00:00Z",
-    endTime: "2021-07-01T11:00:00Z",
-    hostUsername: "TutorJane",
-    participantsUsernames: ["JohnDoe"],
-    type: BookingType.FREE_MEETING,
-    status: BookingStatus.SCHEDULED,
-  },
-  {
-    id: 2,
-    startTime: "2021-07-01T10:00:00Z",
-    endTime: "2021-07-01T11:00:00Z",
-    hostUsername: "TutorJane",
-    participantsUsernames: ["JohnDoe"],
-    type: BookingType.LESSON,
-    status: BookingStatus.AWAITING_STUDENT_CONFIRMATION,
-  },
-];

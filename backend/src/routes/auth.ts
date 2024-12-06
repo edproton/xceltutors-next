@@ -1,5 +1,5 @@
 import { getCookie } from "hono/cookie";
-import { Hono, type Context } from "hono";
+import { type Context } from "hono";
 import {
   createSession,
   generateSessionToken,
@@ -11,8 +11,9 @@ import { googleAuth } from "@hono/oauth-providers/google";
 import { env } from "@/config";
 import { uploadToS3 } from "@/lib/upload";
 import { generateRandomString, hashString } from "@/lib/utils";
+import { h } from "@/lib/facotry";
 
-export const authRoute = new Hono().get("/me", getMe).get(
+export const authRoute = h.get("/me", getMe).get(
   "/google/callback",
   googleAuth({
     client_id: env.GOOGLE_CLIENT_ID,

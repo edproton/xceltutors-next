@@ -1,8 +1,10 @@
 import { env } from "@/config";
-import { Booking, BookingStatus, fakeDatabase } from "@/lib/mock";
+import { Booking, BookingStatus } from "@/lib/mock";
 import { stripe } from "@/lib/stripe";
 import { Context, Hono } from "hono";
 import { Stripe } from "stripe";
+import { BookingService } from "@/services/bookingService";
+import { Env } from "@/lib/facotry";
 
 // Constants and Types
 enum WebhookEventType {
@@ -13,47 +15,11 @@ enum WebhookEventType {
   REFUND_FAILED = "refund.failed",
 }
 
-interface PaymentInfo {
-  paymentIntentId: string;
-  chargeId: string | undefined;
-  metadata?: Record<string, string>;
-}
-
 class BookingError extends Error {
   constructor(message: string) {
     super(message);
     this.name = "BookingError";
   }
-}
-
-// Repository functions
-function getBooking(bookingId: number): Booking {
-  const booking = fakeDatabase.find((booking) => booking.id === bookingId);
-  if (!booking) {
-    throw new BookingError(`Booking not found with ID: ${bookingId}`);
-  }
-  return booking;
-}
-
-function updateBookingStatus(
-  bookingId: number,
-  newStatus: BookingStatus,
-  paymentInfo?: PaymentInfo
-) {
-  const booking = getBooking(bookingId);
-  booking.status = newStatus;
-
-  if (booking.payment && paymentInfo) {
-    booking.payment = {
-      ...booking.payment,
-      paymentIntentId: paymentInfo.paymentIntentId,
-      chargeId: paymentInfo.chargeId,
-    };
-  }
-
-  const updateIndex = fakeDatabase.findIndex((b) => b.id === booking.id);
-  fakeDatabase[updateIndex] = booking;
-  return booking;
 }
 
 // Add this helper function at the top of the file
@@ -91,33 +57,40 @@ function getSessionId(
   return paymentIntent.client_secret || "default-session";
 }
 
-class WebhookHandlers {
-  static handlePaymentIntent(
+export class WebhookHandlers {
+  private readonly bookingsService: BookingService;
+
+  constructor(BookingsService: BookingService) {
+    this.bookingsService = BookingsService;
+  }
+
+  handlePaymentIntent(
     event: Stripe.PaymentIntent,
     newStatus: BookingStatus
-  ): Booking {
+  ): Promise<Booking> {
     if (!event.metadata.bookingId) {
       throw new BookingError("Booking ID not found in payment intent metadata");
     }
 
     const bookingId = parseInt(event.metadata.bookingId);
-    return updateBookingStatus(bookingId, newStatus, {
+
+    return this.bookingsService.updateBookingStatus(bookingId, newStatus, {
       paymentIntentId: event.id,
       chargeId: event.latest_charge?.toString(),
     });
   }
 
-  static handleRefund(
+  async handleRefund(
     event: Stripe.Refund,
     newStatus: BookingStatus,
     expectedStatus?: BookingStatus
-  ): Booking {
+  ): Promise<Booking> {
     if (!event.metadata?.bookingId) {
       throw new BookingError("Booking ID not found in refund metadata");
     }
 
     const bookingId = parseInt(event.metadata.bookingId);
-    const booking = getBooking(bookingId);
+    const booking = await this.bookingsService.getBooking(bookingId);
 
     if (expectedStatus && booking.status !== expectedStatus) {
       throw new BookingError(
@@ -137,16 +110,16 @@ class WebhookHandlers {
       );
     }
 
-    return updateBookingStatus(bookingId, newStatus);
+    return this.bookingsService.updateBookingStatus(bookingId, newStatus);
   }
 
-  static handleChargeRefund(event: Stripe.Charge): Booking {
+  async handleChargeRefund(event: Stripe.Charge): Promise<Booking> {
     if (!event.metadata.bookingId) {
       throw new BookingError("Booking ID not found in charge metadata");
     }
 
     const bookingId = parseInt(event.metadata.bookingId);
-    const booking = getBooking(bookingId);
+    const booking = await this.bookingsService.getBooking(bookingId);
 
     if (booking.status !== BookingStatus.SCHEDULED) {
       throw new BookingError("Booking not in scheduled state");
@@ -168,19 +141,22 @@ class WebhookHandlers {
       );
     }
 
-    return updateBookingStatus(bookingId, BookingStatus.REFUNDED);
+    return this.bookingsService.updateBookingStatus(
+      bookingId,
+      BookingStatus.REFUNDED
+    );
   }
 }
 
 // Webhook Handler
-export async function webhook(c: Context): Promise<Response> {
+export async function webhook(c: Context<Env>): Promise<Response> {
   const signature = c.req.header("stripe-signature");
-
   if (!signature) {
     return c.text("Missing stripe signature", 400);
   }
 
   try {
+    const webhookHandlers = c.var.webhookHandlers;
     const body = await c.req.text();
     const event = await stripe.webhooks.constructEventAsync(
       body,
@@ -190,25 +166,25 @@ export async function webhook(c: Context): Promise<Response> {
 
     switch (event.type) {
       case WebhookEventType.PAYMENT_INTENT_SUCCEEDED:
-        WebhookHandlers.handlePaymentIntent(
+        webhookHandlers.handlePaymentIntent(
           event.data.object,
           BookingStatus.SCHEDULED
         );
         break;
 
       case WebhookEventType.PAYMENT_INTENT_FAILED:
-        WebhookHandlers.handlePaymentIntent(
+        webhookHandlers.handlePaymentIntent(
           event.data.object,
           BookingStatus.PAYMENT_FAILED
         );
         break;
 
       case WebhookEventType.CHARGE_REFUNDED:
-        WebhookHandlers.handleChargeRefund(event.data.object);
+        webhookHandlers.handleChargeRefund(event.data.object);
         break;
 
       case WebhookEventType.REFUND_CREATED:
-        WebhookHandlers.handleRefund(
+        webhookHandlers.handleRefund(
           event.data.object,
           BookingStatus.AWAITING_REFUND,
           BookingStatus.AWAITING_REFUND
@@ -216,7 +192,7 @@ export async function webhook(c: Context): Promise<Response> {
         break;
 
       case WebhookEventType.REFUND_FAILED:
-        WebhookHandlers.handleRefund(
+        webhookHandlers.handleRefund(
           event.data.object,
           BookingStatus.REFUND_FAILED,
           BookingStatus.AWAITING_REFUND
