@@ -1,6 +1,5 @@
 import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
-import { Env } from "@/lib/facotry";
 import { deleteSessionCookie } from "@/lib/cookies";
 import { HTTPException } from "hono/http-exception";
 import {
@@ -28,7 +27,7 @@ declare module "hono" {
 }
 
 // Authentication middleware
-export const authMiddleware = async (c: Context<Env>, next: Next) => {
+export const authMiddleware = async (c: Context, next: Next) => {
   if (c.req.method === "OPTIONS") {
     return next();
   }

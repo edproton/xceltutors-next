@@ -1,11 +1,10 @@
-import { Env } from "@/lib/facotry";
 import { BookingRepository } from "@/repositories/bookingRepository";
 import { WebhookHandlers } from "@/routes/payments";
 import { BookingService } from "@/services/bookingService";
 import { StripeService } from "@/services/stripeService";
 import { createMiddleware } from "hono/factory";
 
-export const diMiddleware = createMiddleware<Env>(async (c, next) => {
+export const diMiddleware = createMiddleware(async (c, next) => {
   const bookingRepository = new BookingRepository();
   const stripeService = new StripeService();
   const bookingService = new BookingService(bookingRepository, stripeService);
