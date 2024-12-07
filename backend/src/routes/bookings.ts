@@ -2,7 +2,6 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { CreateBookingCommandHandler } from "@/features/booking-create";
-import { BookingStatus, BookingType } from "@/lib/mock";
 import { GetBookingsCommandHandler } from "@/features/booking-get-all";
 import { RescheduleBookingCommandHandler } from "@/features/booking-reschedule";
 import { CancelBookingCommandHandler } from "@/features/booking-cancel";
@@ -10,6 +9,7 @@ import { RequestRefundCommandHandler } from "@/features/booking-refund";
 import { ConfirmBookingCommandHandler } from "@/features/booking-confirm";
 import { authMiddleware } from "@/middlewares/auth";
 import { GetBookingByIdCommandHandler } from "@/features/booking-get-by-id";
+import { BookingStatus, BookingType } from "@prisma/client";
 
 const createBookingSchema = z.object({
   startTime: z
