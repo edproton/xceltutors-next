@@ -7,47 +7,55 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+enum Role {
+  TUTOR
+  STUDENT
+  ADMIN
+  MODERATOR
+}
+
 model User {
-  id        Int               @id @default(autoincrement())
-  sessions  Session[]         // Sessions associated with the user
-  accounts  ProviderAccount[] // Authentication accounts linked to the user
-  image     String?            // Binary data for the user's profile image
-  name      String            // User's display name
+  id       Int               @id @default(autoincrement())
+  sessions Session[] // Sessions associated with the user
+  accounts ProviderAccount[] // Authentication accounts linked to the user
+  image    String? // Binary data for the user's profile image
+  name     String // User's display name
+  roles    Role[] // Array of roles for the user
 
   // Booking relations
-  hostedBookings    Booking[] @relation("BookingHost")
-  joinedBookings    Booking[] @relation("BookingParticipants")
+  hostedBookings Booking[] @relation("BookingHost")
+  joinedBookings Booking[] @relation("BookingParticipants")
 }
 
 model Session {
-  id               String   @id // Unique session identifier (e.g., UUID or random string)
-  userId           Int      // Foreign key to the User model
-  expiresAt        DateTime // Session expiration time
-  providerAccountId Int     // Foreign key to the ProviderAccount that created this session
+  id                String   @id // Unique session identifier (e.g., UUID or random string)
+  userId            Int // Foreign key to the User model
+  expiresAt         DateTime // Session expiration time
+  providerAccountId Int // Foreign key to the ProviderAccount that created this session
 
-  user             User             @relation(fields: [userId], references: [id], onDelete: Cascade) 
-                                     // Relationship to the User model
-  providerAccount  ProviderAccount  @relation(fields: [providerAccountId], references: [id], onDelete: Cascade) 
-                                     // Relationship to the ProviderAccount that generated this session
+  user            User            @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationship to the User model
+  providerAccount ProviderAccount @relation(fields: [providerAccountId], references: [id], onDelete: Cascade)
+  // Relationship to the ProviderAccount that generated this session
 
-  @@index([providerAccountId])      // Index on providerAccountId for optimized queries
+  @@index([providerAccountId]) // Index on providerAccountId for optimized queries
 }
 
 model ProviderAccount {
-  id               Int         @id @default(autoincrement()) // Unique identifier for the ProviderAccount
-  provider         String      // Name of the provider (e.g., "google", "facebook")
-  oauthProviderId  String      // ID assigned by the provider for this account
-                               // NOTE: This uniquely identifies the account at the provider level.
-  userId           Int         // Foreign key to the User model
-  imageUrl         String?     // URL to the provider's profile image for the account
-  accessToken      String?     // Access token for the provider's APIs (if applicable)
-  refreshToken     String?     // Refresh token for the provider's APIs (if applicable)
-  expiresAt        DateTime?   // Expiration time for the access token (if applicable)
-  email            String      // Email address associated with the provider account
+  id              Int       @id @default(autoincrement()) // Unique identifier for the ProviderAccount
+  provider        String // Name of the provider (e.g., "google", "facebook")
+  oauthProviderId String // ID assigned by the provider for this account
+  // NOTE: This uniquely identifies the account at the provider level.
+  userId          Int // Foreign key to the User model
+  imageUrl        String? // URL to the provider's profile image for the account
+  accessToken     String? // Access token for the provider's APIs (if applicable)
+  refreshToken    String? // Refresh token for the provider's APIs (if applicable)
+  expiresAt       DateTime? // Expiration time for the access token (if applicable)
+  email           String // Email address associated with the provider account
 
-  user             User        @relation(fields: [userId], references: [id], onDelete: Cascade) 
-                                // Relationship to the User model
-  sessions         Session[]   // Reverse relation to the Session model
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  // Relationship to the User model
+  sessions Session[] // Reverse relation to the Session model
 
   @@unique([provider, oauthProviderId]) // Ensures each provider-oauthProviderId combination is unique
 }
@@ -59,16 +67,19 @@ enum BookingType {
 
 enum BookingStatus {
   AWAITING_TUTOR_CONFIRMATION
-  AWAITING_STUDENT_CONFIRMATION 
+  AWAITING_STUDENT_CONFIRMATION
   AWAITING_PAYMENT
   PAYMENT_FAILED
   SCHEDULED
   CANCELED
   COMPLETED
+  REFUNDED
+  AWAITING_REFUND
+  REFUND_FAILED
 }
 
 enum RecurrencePattern {
-  NONE       // Default for free meetings or one-time bookings
+  NONE // Default for free meetings or one-time bookings
   DAILY
   WEEKLY
   BIWEEKLY
@@ -76,33 +87,54 @@ enum RecurrencePattern {
   CUSTOM
 }
 
-// Booking Model
+model Payment {
+  id        Int      @id @default(autoincrement())
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  // Stripe-specific fields
+  sessionId       String? @unique
+  paymentIntentId String? @unique
+  chargeId        String?
+  sessionUrl      String?
+
+  // Payment metadata
+  metadata Json? // Stores additional payment information as JSON
+
+  // Booking relationship
+  bookingId Int     @unique
+  booking   Booking @relation(fields: [bookingId], references: [id])
+}
+
 model Booking {
-  id            String          @id @default(cuid())
-  createdAt     DateTime        @default(now())
-  updatedAt     DateTime        @updatedAt
-  title         String
-  description   String?
-  startTime     DateTime
-  endTime       DateTime
-  
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  title       String
+  description String?
+  startTime   DateTime
+  endTime     DateTime
+
   // Enum fields
-  type          BookingType
-  status        BookingStatus
+  type   BookingType
+  status BookingStatus
 
   // Host relationship
-  hostId        Int
-  host          User            @relation("BookingHost", fields: [hostId], references: [id])
-  
+  hostId Int
+  host   User @relation("BookingHost", fields: [hostId], references: [id])
+
   // Participants many-to-many relationship
-  participants  User[]          @relation("BookingParticipants")
-  
+  participants User[] @relation("BookingParticipants")
+
   // Recurring booking fields
-  recurrence    RecurrencePattern @default(NONE) // Indicates if the booking is recurring
-  recurrenceEnd DateTime?        // Optional end date for the recurrence
-  parentBookingId String?        // Reference to the original booking for recurring instances
-  parentBooking  Booking?        @relation("ParentBooking", fields: [parentBookingId], references: [id])
-  recurringInstances Booking[]   @relation("ParentBooking")
+  recurrence         RecurrencePattern @default(NONE)
+  recurrenceEnd      DateTime?
+  parentBookingId    Int?
+  parentBooking      Booking?          @relation("ParentBooking", fields: [parentBookingId], references: [id])
+  recurringInstances Booking[]         @relation("ParentBooking")
+
+  // Payment relationship
+  payment Payment?
 
   @@index([hostId])
 }

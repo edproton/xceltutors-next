@@ -1,8 +1,12 @@
 import { env } from "@/config";
 import Stripe from "stripe";
-import { Booking } from "./mock";
+import { Prisma } from "@prisma/client";
 
 export const stripe = new Stripe(env.STRIPE_SECRET_KEY);
+
+type BookingWithPayment = Prisma.BookingGetPayload<{
+  include: { payment: true };
+}>;
 /**
  * Creates a Stripe checkout session for a booking and stores the session URL.
  *
@@ -11,7 +15,9 @@ export const stripe = new Stripe(env.STRIPE_SECRET_KEY);
  * @returns The Stripe checkout session URL.
  */
 export const createOrRegenerateStripeSessionForBooking = async (
-  booking: Booking
+  booking: Prisma.BookingGetPayload<{
+    include: { payment: true; host: true; participants: true };
+  }>
 ): Promise<{ sessionUrl: string; sessionId: string }> => {
   const amount = 10;
   try {
@@ -61,7 +67,7 @@ export const createOrRegenerateStripeSessionForBooking = async (
             currency: "gbp",
             product_data: {
               name: "Tutoring Session",
-              description: `Booking with ${booking.hostUsername}`,
+              description: `Booking with ${booking.host.name}`,
             },
             unit_amount: Math.round(amount * 100),
           },
@@ -71,7 +77,7 @@ export const createOrRegenerateStripeSessionForBooking = async (
       metadata: {
         bookingId: booking.id,
       },
-      customer_email: booking.participantsUsernames[0] + "@example.com",
+      customer_email: booking.participants[0].name + "@example.com",
       customer_creation: "if_required",
       success_url: `${env.FRONTEND_URL}/bookings?session_id={CHECKOUT_SESSION_ID}&bookingId=${booking.id}`,
       cancel_url: `${env.FRONTEND_URL}/bookings?bookingId=${booking.id}`,
@@ -88,7 +94,9 @@ export const createOrRegenerateStripeSessionForBooking = async (
   }
 };
 
-export const createStripeRefund = async (booking: Booking): Promise<void> => {
+export const createStripeRefund = async (
+  booking: BookingWithPayment
+): Promise<void> => {
   try {
     if (!booking) {
       throw new Error("Booking not found");
@@ -96,6 +104,10 @@ export const createStripeRefund = async (booking: Booking): Promise<void> => {
 
     if (!booking.payment?.chargeId) {
       throw new Error("No charge ID found for booking");
+    }
+
+    if (!booking.payment?.paymentIntentId) {
+      throw new Error("No paymentIntentId found for booking");
     }
 
     const refund = await stripe.refunds.create({
@@ -115,7 +127,7 @@ export const createStripeRefund = async (booking: Booking): Promise<void> => {
 };
 
 export const cancelStripePaymentIntent = async (
-  booking: Booking
+  booking: BookingWithPayment
 ): Promise<void> => {
   try {
     if (!booking) {

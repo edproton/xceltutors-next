@@ -1,48 +1,66 @@
 import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
+import { CreateBookingCommandHandler } from "@/features/booking-create";
+import { BookingStatus, BookingType } from "@/lib/mock";
+import { GetBookingsCommandHandler } from "@/features/booking-get-all";
+import { RescheduleBookingCommandHandler } from "@/features/booking-reschedule";
+import { CancelBookingCommandHandler } from "@/features/booking-cancel";
+import { RequestRefundCommandHandler } from "@/features/booking-refund";
+import { ConfirmBookingCommandHandler } from "@/features/booking-confirm";
+import { authMiddleware } from "@/middlewares/auth";
+import { GetBookingByIdCommandHandler } from "@/features/booking-get-by-id";
 
-// Zod schema for booking validation
 const createBookingSchema = z.object({
   startTime: z
     .string()
     .datetime({ message: "Invalid startTime. Must be ISO 8601 format." }),
-  username: z.string().min(1, { message: "Username is required." }),
-  hostUsername: z.string().min(1, { message: "Host username is required." }),
+  toUserId: z.number().min(1, { message: "toUserId is required." }),
 });
+
+export const getBookingsSchema = z
+  .object({
+    page: z.coerce.number().positive().optional(),
+    limit: z.coerce.number().positive().optional(),
+    status: z.nativeEnum(BookingStatus).optional(),
+    type: z.nativeEnum(BookingType).optional(),
+    startDate: z.string().datetime().optional(),
+    endDate: z.string().datetime().optional(),
+    search: z.string().optional(),
+  })
+  .refine(
+    (data) => {
+      if (data.startDate && data.endDate) {
+        return new Date(data.startDate) <= new Date(data.endDate);
+      }
+      return true;
+    },
+    {
+      message: "Start date must be before or equal to end date",
+      path: ["startDate"],
+    }
+  );
 
 const recheduleBookingSchema = z.object({
   startTime: z
     .string()
-    .datetime({ message: "Invalid startTime. Must be ISO 8601 format." }),
+    .datetime({ message: "Invalid startTime. Must be ISO 8601 format." })
+    .refine(
+      (date) => new Date(date) > new Date(),
+      "Cannot reschedule to a past time"
+    ),
 });
 
 export const bookingRoutes = new Hono()
-  .get("/", async (c) => {
-    const bookings = await c.var.dependencies.bookingService.getAllBookings();
-
-    return c.json(
-      {
-        bookings,
-      },
-      200
-    );
-  })
-  // .use(authMiddleware)
-  .get("/:id{[0-9]+}", async (c) => {
-    const id = parseInt(c.req.param("id"));
-    const booking = await c.var.dependencies.bookingService.getBooking(id);
-
-    return c.json(booking, 200);
-  })
+  .use(authMiddleware)
   .post("/", zValidator("json", createBookingSchema), async (c) => {
-    const { startTime, username, hostUsername } = c.req.valid("json");
+    const { startTime, toUserId } = c.req.valid("json");
 
-    const newBooking = await c.var.dependencies.bookingService.createBooking(
+    const newBooking = await CreateBookingCommandHandler.execute({
       startTime,
-      username,
-      hostUsername
-    );
+      currentUser: c.var.user!,
+      toUserId,
+    });
 
     return c.json(
       {
@@ -52,30 +70,46 @@ export const bookingRoutes = new Hono()
       201
     );
   })
+  .get("/", zValidator("query", getBookingsSchema), async (c) => {
+    const { page, limit, status, type, startDate, endDate, search } =
+      c.req.valid("query");
+
+    const bookings = await GetBookingsCommandHandler.execute({
+      currentUser: c.var.user!,
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+      filters: {
+        status,
+        type,
+        startDate,
+        endDate,
+        search,
+      },
+    });
+
+    return c.json(bookings, 200);
+  })
+  .get("/:id{[0-9]+}", async (c) => {
+    const id = parseInt(c.req.param("id"));
+    const booking = await GetBookingByIdCommandHandler.execute({
+      bookingId: id,
+      currentUser: c.var.user!,
+    });
+
+    return c.json(booking, 200);
+  })
   .patch(
     "/:id{[0-9]+}/reschedule",
     zValidator("json", recheduleBookingSchema),
     async (c) => {
       const id = parseInt(c.req.param("id"));
       const { startTime } = c.req.valid("json");
-      const username = c.req.header("x-username");
 
-      if (!username) {
-        return c.json(
-          {
-            error: "Username is required in the header.",
-            code: "MISSING_USERNAME",
-          },
-          400
-        );
-      }
-
-      const updatedBooking =
-        await c.var.dependencies.bookingService.rescheduleBooking(
-          id,
-          startTime,
-          username
-        );
+      const updatedBooking = await RescheduleBookingCommandHandler.execute({
+        bookingId: id,
+        currentUser: c.var.user!,
+        startTime,
+      });
 
       return c.json(
         {
@@ -88,51 +122,28 @@ export const bookingRoutes = new Hono()
   )
   .patch("/:id{[0-9]+}/cancel", async (c) => {
     const id = parseInt(c.req.param("id"));
-    const username = c.req.header("x-username");
-
-    if (!username) {
-      return c.json(
-        {
-          error: "Username is required in the header.",
-          code: "MISSING_USERNAME",
-        },
-        400
-      );
-    }
-
-    // Call the service to cancel the booking
-    const result = await c.var.dependencies.bookingService.cancelBooking(
-      id,
-      username
-    );
+    const result = await CancelBookingCommandHandler.execute({
+      bookingId: id,
+      currentUser: c.var.user!,
+    });
 
     return c.json(result, 200);
   })
   .patch("/:id{[0-9]+}/cancel/refund", async (c) => {
     const id = parseInt(c.req.param("id"));
-
-    const result = await c.var.dependencies.bookingService.requestRefund(id);
+    const result = await RequestRefundCommandHandler.execute({
+      bookingId: id,
+      currentUser: c.var.user!,
+    });
 
     return c.json(result, 200);
   })
   .patch("/:id{[0-9]+}/confirm", async (c) => {
-    const id = c.req.param("id");
-    const username = c.req.header("x-username");
-
-    if (!username) {
-      return c.json(
-        {
-          error: "Username is required in the header.",
-          code: "MISSING_USERNAME",
-        },
-        400
-      );
-    }
-
-    const result = await c.var.dependencies.bookingService.confirmBooking(
-      id,
-      username
-    );
+    const id = parseInt(c.req.param("id"));
+    const result = await ConfirmBookingCommandHandler.execute({
+      bookingId: id,
+      currentUser: c.var.user!,
+    });
 
     return c.json(result, 200);
   });

@@ -7,22 +7,12 @@ import {
   type SessionValidationResult,
 } from "@/lib/sessions";
 import type { User, Session, ProviderAccount } from "@prisma/client";
-import { IBookingRepository } from "@/repositories/bookingRepository";
-import { WebhookHandlers } from "@/routes/payments";
-import { BookingService } from "@/services/bookingService";
-import { StripeService } from "@/services/stripeService";
 
 declare module "hono" {
   interface ContextVariableMap {
     user: User | null;
     session: (Session & { providerAccount: ProviderAccount }) | null;
     providerAccount: ProviderAccount | null;
-    dependencies: {
-      bookingRepository: IBookingRepository;
-      bookingService: BookingService;
-      stripeService: StripeService;
-      webhookHandlers: WebhookHandlers;
-    };
   }
 }
 

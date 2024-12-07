@@ -5,13 +5,11 @@ import { env } from "@/config";
 import { authRoute } from "./routes/auth";
 import { bookingRoutes } from "./routes/bookings";
 import { paymentRoute } from "./routes/payments";
-import { diMiddleware } from "./middlewares/di";
 import { Hono } from "hono";
 
 const API_VERSION = "v1";
 
 const app = new Hono()
-  .use(diMiddleware)
   .use(logger())
   .use(async (c, next) => {
     await next();
