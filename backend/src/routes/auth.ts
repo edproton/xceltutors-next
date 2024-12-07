@@ -1,51 +1,86 @@
 import { getCookie } from "hono/cookie";
 import { Hono, type Context } from "hono";
-import {
-  createSession,
-  generateSessionToken,
-  validateSessionToken,
-} from "@/lib/sessions";
+import { createSession, generateSessionToken } from "@/lib/sessions";
 import { deleteSessionCookie, setSessionCookie } from "@/lib/cookies";
 import { prisma } from "@/lib/prisma";
 import { googleAuth } from "@hono/oauth-providers/google";
 import { env } from "@/config";
 import { uploadToS3 } from "@/lib/upload";
 import { generateRandomString, hashString } from "@/lib/utils";
+import { createHash } from "crypto";
+import { AuthenticationType, Role } from "@prisma/client";
 
-export const authRoute = new Hono().get("/me", getMe).get(
-  "/google/callback",
-  googleAuth({
-    client_id: env.GOOGLE_CLIENT_ID,
-    client_secret: env.GOOGLE_CLIENT_SECRET,
-    scope: ["openid", "email", "profile"],
-  }),
-  google
-);
+export const authRoute = new Hono()
+  .get("/me", getMe)
+  .get(
+    "/google/callback",
+    googleAuth({
+      client_id: env.GOOGLE_CLIENT_ID,
+      client_secret: env.GOOGLE_CLIENT_SECRET,
+      scope: ["openid", "email", "profile"],
+    }),
+    google
+  )
+  .post("/credentials/signup", signupWithCredentials)
+  .post("/credentials/login", loginWithCredentials);
 
-export async function getMe(c: Context): Promise<Response> {
-  const sessionToken = getCookie(c, "session");
+function hashPassword(password: string): string {
+  return createHash("sha256").update(password).digest("hex");
+}
 
-  if (!sessionToken) {
-    console.error("[GetMe] No session token found in cookies");
-    return c.json({ error: "Session token is missing" }, 401);
-  }
-
-  console.log("[GetMe] Received session token for validation", {
-    sessionToken,
-  });
-
+async function signupWithCredentials(c: Context): Promise<Response> {
   try {
-    const { session, user } = await validateSessionToken(sessionToken);
+    const { email, password, name } = await c.req.json();
 
-    if (!session || !user) {
-      console.warn("[GetMe] Invalid or expired session", { sessionToken });
-      deleteSessionCookie(c);
-      return c.json({ error: "Invalid or expired session" }, 401);
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required" }, 400);
     }
 
-    setSessionCookie(c, sessionToken, session.expiresAt);
+    // Check if email exists in credentials or OAuth providers
+    const existingCredentials = await prisma.credentialsProvider.findUnique({
+      where: { email },
+    });
 
-    console.log("[GetMe] Returning user details", { userId: user.id });
+    const existingOAuth = await prisma.providerAccount.findFirst({
+      where: { email },
+    });
+
+    if (existingCredentials || existingOAuth) {
+      return c.json({ error: "Email already in use" }, 400);
+    }
+
+    const passwordHash = hashPassword(password);
+
+    // Create user and credentials in a transaction
+    const { user, credentials } = await prisma.$transaction(async (tx) => {
+      const user = await tx.user.create({
+        data: {
+          name: name || email,
+          roles: [Role.STUDENT],
+        },
+      });
+
+      const credentials = await tx.credentialsProvider.create({
+        data: {
+          userId: user.id,
+          email,
+          passwordHash,
+        },
+      });
+
+      return { user, credentials };
+    });
+
+    // Create session
+    const sessionToken = generateSessionToken();
+    const session = await createSession({
+      token: sessionToken,
+      userId: credentials.userId,
+      authType: AuthenticationType.CREDENTIALS,
+      credentialsId: credentials.id,
+    });
+
+    setSessionCookie(c, sessionToken, session.expiresAt);
 
     return c.json({
       user: {
@@ -58,7 +93,159 @@ export async function getMe(c: Context): Promise<Response> {
       },
     });
   } catch (error) {
-    console.error("[GetMe] Error while processing request", { error });
+    console.error("[Credentials Signup] Error:", error);
+    return c.json({ error: "An error occurred during signup" }, 500);
+  }
+}
+
+async function loginWithCredentials(c: Context): Promise<Response> {
+  try {
+    const { email, password } = await c.req.json();
+
+    if (!email || !password) {
+      return c.json({ error: "Email and password are required" }, 400);
+    }
+
+    const credentials = await prisma.credentialsProvider.findUnique({
+      where: { email },
+      include: {
+        user: true,
+      },
+    });
+
+    if (!credentials) {
+      return c.json({ error: "Invalid email or password" }, 401);
+    }
+
+    // Check account lock
+    if (credentials.lockedUntil && credentials.lockedUntil > new Date()) {
+      return c.json(
+        {
+          error: "Account is temporarily locked. Please try again later",
+        },
+        401
+      );
+    }
+
+    const passwordHash = hashPassword(password);
+    if (credentials.passwordHash !== passwordHash) {
+      // Update failed attempts
+      await prisma.credentialsProvider.update({
+        where: { id: credentials.id },
+        data: {
+          failedAttempts: { increment: 1 },
+          lastFailedAt: new Date(),
+          lockedUntil:
+            credentials.failedAttempts >= 4
+              ? new Date(Date.now() + 15 * 60 * 1000)
+              : null,
+        },
+      });
+
+      return c.json({ error: "Invalid email or password" }, 401);
+    }
+
+    // Reset failed attempts
+    await prisma.credentialsProvider.update({
+      where: { id: credentials.id },
+      data: {
+        failedAttempts: 0,
+        lastFailedAt: null,
+        lockedUntil: null,
+      },
+    });
+
+    // Create session
+    const sessionToken = generateSessionToken();
+    const session = await createSession({
+      token: sessionToken,
+      userId: credentials.userId,
+      authType: AuthenticationType.CREDENTIALS,
+      credentialsId: credentials.id,
+    });
+
+    setSessionCookie(c, sessionToken, session.expiresAt);
+
+    return c.json({
+      user: {
+        id: credentials.user.id,
+        name: credentials.user.name,
+      },
+      session: {
+        id: session.id,
+        expiresAt: session.expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error("[Credentials Login] Error:", error);
+    return c.json({ error: "An error occurred during login" }, 500);
+  }
+}
+
+// Updated getMe to handle both OAuth and Credentials sessions
+export async function getMe(c: Context): Promise<Response> {
+  const sessionToken = getCookie(c, "session");
+
+  if (!sessionToken) {
+    console.error("[GetMe] No session token found in cookies");
+    return c.json({ error: "Session token is missing" }, 401);
+  }
+
+  const sessionId = createHash("sha256").update(sessionToken).digest("hex");
+  console.log("[GetMe] Validating session:", { sessionId });
+
+  try {
+    const sessionRecord = await prisma.session.findUnique({
+      where: { id: sessionId },
+      include: {
+        user: true,
+        providerAccount: true,
+        credentials: true,
+      },
+    });
+
+    if (!sessionRecord || !sessionRecord.user) {
+      console.warn("[GetMe] Invalid or expired session");
+      deleteSessionCookie(c);
+      return c.json({ error: "Invalid or expired session" }, 401);
+    }
+
+    // Handle session expiration
+    if (Date.now() >= sessionRecord.expiresAt.getTime()) {
+      await prisma.session.delete({ where: { id: sessionId } });
+      deleteSessionCookie(c);
+      return c.json({ error: "Session expired" }, 401);
+    }
+
+    // Extend session if needed
+    if (
+      Date.now() >=
+      sessionRecord.expiresAt.getTime() - 15 * 24 * 60 * 60 * 1000
+    ) {
+      const newExpiresAt = new Date(Date.now() + 30 * 24 * 60 * 60 * 1000);
+      await prisma.session.update({
+        where: { id: sessionId },
+        data: { expiresAt: newExpiresAt },
+      });
+      setSessionCookie(c, sessionToken, newExpiresAt);
+    }
+
+    // Return user info with auth type
+    return c.json({
+      user: {
+        id: sessionRecord.user.id,
+        name: sessionRecord.user.name,
+      },
+      authType: sessionRecord.providerAccount
+        ? AuthenticationType.OAUTH
+        : AuthenticationType.CREDENTIALS,
+      session: {
+        id: sessionRecord.id,
+        expiresAt: sessionRecord.expiresAt,
+      },
+    });
+  } catch (error) {
+    console.error("[GetMe] Error:", error);
     return c.json({ error: "An error occurred while retrieving profile" }, 500);
   }
 }
@@ -241,11 +428,12 @@ export async function google(c: Context): Promise<Response> {
 
   // Create session and set cookie
   const sessionToken = generateSessionToken();
-  const session = await createSession(
-    sessionToken,
-    user.id,
-    providerAccount.id
-  );
+  const session = await createSession({
+    token: sessionToken,
+    userId: user.id,
+    authType: AuthenticationType.OAUTH,
+    providerAccountId: providerAccount.id,
+  });
 
   console.log(
     `[Auth Callback] Session created successfully for user ${user.id} with session token ${sessionToken}`
