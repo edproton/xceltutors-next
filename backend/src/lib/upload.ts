@@ -27,11 +27,10 @@ export async function uploadToS3(
     });
 
     await s3Client.send(command);
-    console.log(`[S3] Image uploaded successfully: ${key}`);
 
     // Return the public URL
     const publicUrl = `https://${bucketName}.s3.${env.AWS_REGION}.amazonaws.com/${key}`;
-    console.log(`[S3] Public URL: ${publicUrl}`);
+
     return publicUrl;
   } catch (error) {
     console.error("[S3] Error uploading image:", error);

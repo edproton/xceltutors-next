@@ -24,7 +24,6 @@ export const authMiddleware = async (c: Context, next: Next) => {
   try {
     let sessionToken = c.req.header(SESSION_HEADER);
 
-    console.log("sessionToken", sessionToken);
     if (sessionToken) {
       if (!sessionToken.startsWith(BEARER_PREFIX)) {
         throw new HTTPException(401, {
@@ -33,8 +32,6 @@ export const authMiddleware = async (c: Context, next: Next) => {
       }
 
       sessionToken = sessionToken.slice(BEARER_PREFIX.length);
-
-      console.log("HEADER sessionToken", sessionToken);
     } else {
       sessionToken = getCookie(c, "session");
     }

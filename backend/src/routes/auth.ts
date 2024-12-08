@@ -192,7 +192,6 @@ export async function getMe(c: Context): Promise<Response> {
   }
 
   const sessionId = createHash("sha256").update(sessionToken).digest("hex");
-  console.log("[GetMe] Validating session:", { sessionId });
 
   try {
     const sessionRecord = await prisma.session.findUnique({
@@ -278,19 +277,11 @@ async function handleProfilePicture(
     // Generate a unique file name for the S3 object
     const fileName = `profile-pictures/${providerAccountId}-${generateRandomString()}.${extension}`;
 
-    console.log(
-      `[Profile Picture] Uploading image to S3 with filename: ${fileName}`
-    );
-
     // Upload the image to S3 and get the URL
     const uploadedImageUrl = await uploadToS3(
       fileName,
       Buffer.from(buffer),
       contentType
-    );
-
-    console.log(
-      `[Profile Picture] Image uploaded successfully to ${uploadedImageUrl}`
     );
 
     return uploadedImageUrl;
@@ -335,8 +326,6 @@ export async function google(c: Context): Promise<Response> {
   let uploadedImageUrl: string | null = null;
 
   if (!user) {
-    console.log("[Auth Callback] Creating new user and provider account.");
-
     // Upload profile picture for new user
     if (picture) {
       try {
@@ -374,8 +363,6 @@ export async function google(c: Context): Promise<Response> {
 
     providerAccount = user.accounts[0];
   } else {
-    console.log("[Auth Callback] Updating existing provider account and user.");
-
     // Check if profile picture has changed
     if (picture) {
       const newPictureHash = hashString(picture);
@@ -384,7 +371,6 @@ export async function google(c: Context): Promise<Response> {
         : null;
 
       if (newPictureHash !== existingPictureHash) {
-        console.log("[Auth Callback] Profile picture has changed. Updating...");
         try {
           uploadedImageUrl = await handleProfilePicture(
             picture,
@@ -394,7 +380,6 @@ export async function google(c: Context): Promise<Response> {
           console.error("[Auth Callback] Failed to upload the image:", error);
         }
       } else {
-        console.log("[Auth Callback] Profile picture is unchanged.");
         uploadedImageUrl = user.image; // Keep the existing image
       }
     }
@@ -434,10 +419,6 @@ export async function google(c: Context): Promise<Response> {
     authType: AuthenticationType.OAUTH,
     providerAccountId: providerAccount.id,
   });
-
-  console.log(
-    `[Auth Callback] Session created successfully for user ${user.id} with session token ${sessionToken}`
-  );
 
   setSessionCookie(c, sessionToken, session.expiresAt);
 

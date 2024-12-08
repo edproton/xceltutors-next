@@ -14,8 +14,6 @@ export function setSessionCookie(
     path: "/",
     expires: expiresAt,
   });
-
-  console.log("[Cookie] Set session cookie", { token, expiresAt });
 }
 
 export function deleteSessionCookie(c: Context): void {
@@ -23,6 +21,4 @@ export function deleteSessionCookie(c: Context): void {
     path: "/",
     secure: process.env.NODE_ENV === "production",
   });
-
-  console.log("[Cookie] Deleted session cookie");
 }

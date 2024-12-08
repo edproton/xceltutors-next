@@ -17,7 +17,6 @@ export function generateSessionToken(): string {
   const bytes = new Uint8Array(20);
   crypto.getRandomValues(bytes);
   const token = encodeBase32LowerCaseNoPadding(bytes);
-  console.log(`[Session Manager] Generated token: ${token}`);
 
   return token;
 }
@@ -39,15 +38,7 @@ export async function createSession({
   credentialsId,
 }: CreateSessionParams): Promise<Session> {
   const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
-
   const expiresAt = new Date(Date.now() + daysToMs(SESSION_DURATION_DAYS));
-  console.log(
-    `[Session Manager] Creating ${authType} session for user ${userId}`,
-    authType === AuthenticationType.OAUTH
-      ? `providerAccount ${providerAccountId}`
-      : `credentials ${credentialsId}`,
-    `expiresAt: ${expiresAt}`
-  );
 
   const sessionData: Prisma.SessionCreateInput = {
     id: sessionId,
@@ -64,9 +55,6 @@ export async function createSession({
       data: sessionData,
     });
 
-    console.log(
-      `[Session Manager] Session created successfully. Session ID: ${sessionId}`
-    );
     return createdSession;
   } catch (error) {
     console.error(
@@ -86,7 +74,6 @@ export async function validateSessionToken(
   token: string
 ): Promise<SessionWithUser | undefined> {
   const sessionId = encodeHexLowerCase(sha256(new TextEncoder().encode(token)));
-  console.log(`[Session Manager] Validating session with ID: ${sessionId}`);
 
   try {
     const sessionRecord = await prisma.session.findUnique({
@@ -124,8 +111,6 @@ export async function validateSessionToken(
         data: { expiresAt: sessionRecord.expiresAt },
       });
     }
-
-    console.log(`[Session Manager] Session with ID ${sessionId} is valid.`);
 
     return sessionRecord;
   } catch (error) {
