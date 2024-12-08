@@ -2,7 +2,11 @@ import { z } from "zod";
 import { zValidator } from "@hono/zod-validator";
 import { Hono } from "hono";
 import { CreateBookingCommandHandler } from "@/features/booking-create";
-import { GetBookingsCommandHandler } from "@/features/booking-get-all";
+import {
+  BookingSortField,
+  GetBookingsCommandHandler,
+  SortDirection,
+} from "@/features/booking-get-all";
 import { RescheduleBookingCommandHandler } from "@/features/booking-reschedule";
 import { CancelBookingCommandHandler } from "@/features/booking-cancel";
 import { RequestRefundCommandHandler } from "@/features/booking-refund";
@@ -30,24 +34,39 @@ export const getBookingsSchema = z
     page: z.coerce.number().positive().optional(),
     limit: z.coerce.number().positive().optional(),
     status: z
-      .union([
-        z.nativeEnum(BookingStatus), // Single status
-        z.nativeEnum(BookingStatus).array(), // Array of statuses
-      ])
+      .union([z.nativeEnum(BookingStatus), z.nativeEnum(BookingStatus).array()])
       .optional()
       .transform((value) => {
         if (!value) return undefined;
         return Array.isArray(value) ? value : [value];
       }),
     type: z.nativeEnum(BookingType).optional(),
-    startDate: z.string().datetime().optional(),
-    endDate: z.string().datetime().optional(),
+    startDate: z
+      .string()
+      .datetime()
+      .transform((date) => {
+        const parsed = DateTime.fromISO(date);
+        return parsed.isValid ? parsed.toISO() : undefined;
+      })
+      .optional(),
+    endDate: z
+      .string()
+      .datetime()
+      .transform((date) => {
+        const parsed = DateTime.fromISO(date);
+        return parsed.isValid ? parsed.toISO() : undefined;
+      })
+      .optional(),
     search: z.string().optional(),
+    sortField: z.nativeEnum(BookingSortField).optional(),
+    sortDirection: z.nativeEnum(SortDirection).optional(),
   })
   .refine(
     (data) => {
       if (data.startDate && data.endDate) {
-        return new Date(data.startDate) <= new Date(data.endDate);
+        const start = DateTime.fromISO(data.startDate);
+        const end = DateTime.fromISO(data.endDate);
+        return start <= end;
       }
       return true;
     },
@@ -120,20 +139,36 @@ export const bookingRoutes = new Hono()
     );
   })
   .get("/", zValidator("query", getBookingsSchema), async (c) => {
-    const { page, limit, status, type, startDate, endDate, search } =
-      c.req.valid("query");
+    const {
+      page,
+      limit,
+      status,
+      type,
+      startDate,
+      endDate,
+      search,
+      sortField,
+      sortDirection,
+    } = c.req.valid("query");
 
     const bookings = await GetBookingsCommandHandler.execute({
       currentUser: c.var.user!,
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       filters: {
-        status: status ? status : undefined, // Now handles array
+        status: status ? status : undefined,
         type,
         startDate,
         endDate,
         search,
       },
+      sort:
+        sortField && sortDirection
+          ? {
+              field: sortField,
+              direction: sortDirection,
+            }
+          : undefined,
     });
 
     return c.json(bookings, 200);

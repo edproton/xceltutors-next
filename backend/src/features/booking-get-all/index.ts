@@ -1,4 +1,3 @@
-// src/bookings/commands/get-bookings.command.ts
 import { prisma } from "@/lib/prisma";
 import {
   Booking,
@@ -7,11 +6,45 @@ import {
   User,
   Prisma,
 } from "@prisma/client";
+import { DateTime } from "luxon";
+
+type BookingWithRelations = Prisma.BookingGetPayload<{
+  include: {
+    host: {
+      select: {
+        id: true;
+        name: true;
+        image: true;
+      };
+    };
+    participants: {
+      select: {
+        id: true;
+        name: true;
+        image: true;
+      };
+    };
+  };
+}>;
+
+export enum BookingSortField {
+  START_TIME = "START_TIME",
+  CREATED_AT = "CREATED_AT",
+}
+
+export enum SortDirection {
+  ASC = "asc",
+  DESC = "desc",
+}
 
 export interface GetBookingsCommand {
   currentUser: User;
   page?: number;
   limit?: number;
+  sort?: {
+    field: BookingSortField;
+    direction: SortDirection;
+  };
   filters?: {
     startDate?: string;
     endDate?: string;
@@ -34,16 +67,93 @@ export interface PaginatedResponse<T> {
 export class GetBookingsCommandHandler {
   private static readonly DEFAULT_PAGE = 1;
   private static readonly DEFAULT_LIMIT = 10;
+  private static readonly MAX_LIMIT = 100;
+  private static readonly DEFAULT_SORT = {
+    field: BookingSortField.START_TIME,
+    direction: SortDirection.DESC,
+  };
 
   static async execute(
     command: GetBookingsCommand
-  ): Promise<PaginatedResponse<Booking>> {
-    const page = command.page || this.DEFAULT_PAGE;
-    const limit = command.limit || this.DEFAULT_LIMIT;
+  ): Promise<PaginatedResponse<BookingWithRelations>> {
+    const page = Math.max(1, command.page || this.DEFAULT_PAGE);
+    const limit = Math.min(
+      this.MAX_LIMIT,
+      Math.max(1, command.limit || this.DEFAULT_LIMIT)
+    );
     const skip = (page - 1) * limit;
+    const sort = command.sort || this.DEFAULT_SORT;
 
-    // Build where clause dynamically
-    const where: Prisma.BookingWhereInput = {
+    const where = this.buildWhereClause(command);
+    const orderBy = this.buildOrderByClause(sort);
+
+    const [total, bookings] = await Promise.all([
+      prisma.booking.count({ where }),
+      prisma.booking.findMany({
+        where,
+        skip,
+        take: limit,
+        orderBy,
+        include: {
+          host: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
+          },
+          participants: {
+            select: {
+              id: true,
+              name: true,
+              image: true,
+            },
+          },
+        },
+      }),
+    ]);
+
+    return {
+      items: bookings,
+      metadata: {
+        total,
+        page,
+        limit,
+        pages: Math.ceil(total / limit),
+      },
+    };
+  }
+
+  private static buildOrderByClause(sort: {
+    field: BookingSortField;
+    direction: SortDirection;
+  }): Prisma.BookingOrderByWithRelationInput[] {
+    const primarySort: Prisma.BookingOrderByWithRelationInput = {};
+
+    switch (sort.field) {
+      case BookingSortField.START_TIME:
+        primarySort.startTime = sort.direction;
+        break;
+      case BookingSortField.CREATED_AT:
+        primarySort.createdAt = sort.direction;
+        break;
+      default:
+        primarySort.startTime = SortDirection.DESC;
+    }
+
+    // Always add a secondary sort for consistency
+    const secondarySort: Prisma.BookingOrderByWithRelationInput =
+      sort.field === BookingSortField.START_TIME
+        ? { createdAt: sort.direction }
+        : { startTime: sort.direction };
+
+    return [primarySort, secondarySort];
+  }
+
+  private static buildWhereClause(
+    command: GetBookingsCommand
+  ): Prisma.BookingWhereInput {
+    const baseWhere: Prisma.BookingWhereInput = {
       OR: [
         { hostId: command.currentUser.id },
         {
@@ -56,42 +166,64 @@ export class GetBookingsCommandHandler {
       ],
     };
 
-    // Add dynamic filters if they exist
-    if (command.filters) {
-      if (command.filters.status?.length) {
-        where.status = {
-          in: command.filters.status,
-        };
-      }
+    if (!command.filters) {
+      return baseWhere;
+    }
 
-      if (command.filters.type) {
-        where.type = command.filters.type;
-      }
+    const whereConditions: Prisma.BookingWhereInput[] = [baseWhere];
 
-      if (command.filters.startDate) {
-        where.startTime = {
-          gte: new Date(command.filters.startDate),
-        };
-      }
+    // Add status filter
+    if (command.filters.status?.length) {
+      whereConditions.push({
+        status: { in: command.filters.status },
+      });
+    }
 
-      if (command.filters.endDate) {
-        where.endTime = {
-          lte: new Date(command.filters.endDate),
-        };
-      }
+    // Add type filter
+    if (command.filters.type) {
+      whereConditions.push({ type: command.filters.type });
+    }
 
-      if (command.filters.search) {
-        where.OR = [
+    // Add date range filters
+    const dateFilters: Prisma.BookingWhereInput = {};
+
+    if (command.filters.startDate) {
+      const startDate = DateTime.fromISO(command.filters.startDate, {
+        zone: "utc",
+      });
+      if (startDate.isValid) {
+        dateFilters.startTime = { gte: startDate.toJSDate() };
+      }
+    }
+
+    if (command.filters.endDate) {
+      const endDate = DateTime.fromISO(command.filters.endDate, {
+        zone: "utc",
+      });
+      if (endDate.isValid) {
+        dateFilters.endTime = { lte: endDate.toJSDate() };
+      }
+    }
+
+    if (Object.keys(dateFilters).length > 0) {
+      whereConditions.push(dateFilters);
+    }
+
+    // Add search filter if provided
+    if (command.filters.search?.trim()) {
+      const searchTerm = command.filters.search.trim();
+      whereConditions.push({
+        OR: [
           {
             title: {
-              contains: command.filters.search,
+              contains: searchTerm,
               mode: "insensitive",
             },
           },
           {
             host: {
               name: {
-                contains: command.filters.search,
+                contains: searchTerm,
                 mode: "insensitive",
               },
             },
@@ -100,53 +232,19 @@ export class GetBookingsCommandHandler {
             participants: {
               some: {
                 name: {
-                  contains: command.filters.search,
+                  contains: searchTerm,
                   mode: "insensitive",
                 },
               },
             },
           },
-        ];
-      }
+        ],
+      });
     }
 
-    // Get total count for pagination
-    const total = await prisma.booking.count({ where });
-
-    // Get paginated results
-    const bookings = await prisma.booking.findMany({
-      where,
-      skip,
-      take: limit,
-      orderBy: {
-        startTime: "desc",
-      },
-      include: {
-        host: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-        participants: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
-    });
-
+    // Combine all conditions with AND
     return {
-      items: bookings,
-      metadata: {
-        total,
-        page,
-        limit,
-        pages: Math.ceil(total / limit),
-      },
+      AND: whereConditions,
     };
   }
 }
