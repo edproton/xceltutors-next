@@ -74,7 +74,11 @@ export const getBookingsSchema = z
       message: "Start date must be before or equal to end date",
       path: ["startDate"],
     }
-  );
+  )
+  .refine((data) => !data.sortField === !data.sortDirection, {
+    message: "sortField and sortDirection must be provided together",
+    path: ["sortField"],
+  });
 
 const recheduleBookingSchema = z.object({
   startTime: z
