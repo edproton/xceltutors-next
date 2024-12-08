@@ -8,10 +8,11 @@ import {
   User,
 } from "@prisma/client";
 import { BookingValidationError } from "../errors";
+import { DateTime } from "luxon";
 
 export interface RescheduleBookingCommand {
   bookingId: number;
-  startTime: string;
+  startTime: string; // ISO 8601 UTC string
   currentUser: User;
 }
 
@@ -23,50 +24,76 @@ export class RescheduleBookingCommandHandler {
   private static readonly FREE_MEETING_DURATION_MINUTES = 15;
   private static readonly LESSON_DURATION_MINUTES = 60;
 
+  /**
+   * Reschedules an existing booking to a new time
+   */
   static async execute(command: RescheduleBookingCommand): Promise<Booking> {
-    const booking = await this.getAndValidateBooking(command.bookingId);
+    // 1. Get booking first
+    const booking = await this.getBookingById(command.bookingId);
+
+    // 2. Validate permissions and status immediately
     await this.validateUserPermissions(booking, command.currentUser);
-    await this.validateNewStartTime(command.startTime);
 
-    const newEndTime = this.calculateNewEndTime(
+    // 3. Only then validate and process the new time
+    const newStartTime = this.parseAndValidateDateTime(
       command.startTime,
-      booking.type
+      booking
     );
+    const newEndTime = this.calculateEndTime(newStartTime, booking.type);
 
-    await this.validateNoConflicts(
+    // 4. Check for conflicts
+    await this.validateNoTimeConflicts(
       booking.hostId,
-      new Date(command.startTime),
+      newStartTime,
       newEndTime,
       booking.id
     );
 
-    return await prisma.booking.update({
-      where: { id: command.bookingId },
-      data: {
-        startTime: new Date(command.startTime),
-        endTime: newEndTime,
-        status: this.determineNewStatus(booking, command.currentUser),
-      },
-      include: {
-        host: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-        participants: {
-          select: {
-            id: true,
-            name: true,
-            image: true,
-          },
-        },
-      },
-    });
+    // 5. Update the booking
+    return await this.updateBooking(
+      booking,
+      command.currentUser,
+      newStartTime,
+      newEndTime
+    );
   }
 
-  private static async getAndValidateBooking(
+  private static parseAndValidateDateTime(
+    dateTimeStr: string,
+    currentBooking: BookingWithParticipants
+  ): DateTime {
+    const newDateTime = DateTime.fromISO(dateTimeStr, { zone: "utc" });
+    const currentStartTime = DateTime.fromJSDate(currentBooking.startTime, {
+      zone: "utc",
+    });
+
+    if (!newDateTime.isValid) {
+      throw new BookingValidationError(
+        "INVALID_DATE",
+        "Invalid date format. Please provide ISO 8601 UTC date"
+      );
+    }
+
+    const now = DateTime.utc();
+    if (newDateTime <= now) {
+      throw new BookingValidationError(
+        "PAST_TIME",
+        "Cannot reschedule to a past time"
+      );
+    }
+
+    // Check if the new time is the same as current time
+    if (newDateTime.equals(currentStartTime)) {
+      throw new BookingValidationError(
+        "SAME_TIME",
+        "New booking time must be different from the current time"
+      );
+    }
+
+    return newDateTime;
+  }
+
+  private static async getBookingById(
     bookingId: number
   ): Promise<BookingWithParticipants> {
     const booking = await prisma.booking.findUnique({
@@ -90,79 +117,132 @@ export class RescheduleBookingCommandHandler {
     booking: BookingWithParticipants,
     currentUser: User
   ): Promise<void> {
-    const isTutor =
-      booking.hostId === currentUser.id &&
-      currentUser.roles.includes(Role.TUTOR);
+    const userRoles = this.getUserRoles(booking, currentUser);
 
-    const isStudent =
-      currentUser.roles.includes(Role.STUDENT) &&
-      booking.participants.some((p) => p.id === currentUser.id);
-
-    if (!isTutor && !isStudent) {
+    if (!userRoles.isParticipant) {
       throw new BookingValidationError(
         "UNAUTHORIZED",
         "User not authorized to reschedule this booking"
       );
     }
 
+    // Block rescheduling for some statuses
+    const nonReschedulableStatuses: BookingStatus[] = [
+      BookingStatus.COMPLETED,
+      BookingStatus.CANCELED,
+      BookingStatus.AWAITING_REFUND,
+      BookingStatus.REFUND_FAILED,
+      BookingStatus.REFUNDED,
+    ];
+
+    if (nonReschedulableStatuses.includes(booking.status)) {
+      throw new BookingValidationError(
+        "INVALID_STATUS",
+        `Booking cannot be rescheduled when status is ${booking.status}.`
+      );
+    }
+
+    // Tutor's turn validation
     if (
-      isTutor &&
+      userRoles.isTutor &&
       booking.status !== BookingStatus.AWAITING_TUTOR_CONFIRMATION
     ) {
       throw new BookingValidationError(
         "INVALID_STATUS_TUTOR",
-        `Only bookings in ${BookingStatus.AWAITING_TUTOR_CONFIRMATION} can be rescheduled by the tutor`
+        `Tutor can only reschedule when status is ${BookingStatus.AWAITING_TUTOR_CONFIRMATION}`
       );
     }
 
+    // Student's turn validation
     if (
-      isStudent &&
+      userRoles.isStudent &&
       booking.status !== BookingStatus.AWAITING_STUDENT_CONFIRMATION
     ) {
       throw new BookingValidationError(
         "INVALID_STATUS_STUDENT",
-        `Only bookings in ${BookingStatus.AWAITING_STUDENT_CONFIRMATION} can be rescheduled by the student`
+        `Student can only reschedule when status is ${BookingStatus.AWAITING_STUDENT_CONFIRMATION}`
       );
     }
   }
 
-  private static async validateNewStartTime(startTime: string): Promise<void> {
-    const newStartTime = new Date(startTime);
-    const now = new Date();
+  private static determineNewStatus(
+    booking: Booking,
+    currentUser: User
+  ): BookingStatus {
+    const isTutor = booking.hostId === currentUser.id;
 
-    if (newStartTime <= now) {
+    // When tutor reschedules, only student can respond next
+    // When student reschedules, only tutor can respond next
+    return isTutor
+      ? BookingStatus.AWAITING_STUDENT_CONFIRMATION
+      : BookingStatus.AWAITING_TUTOR_CONFIRMATION;
+  }
+
+  private static getUserRoles(booking: BookingWithParticipants, user: User) {
+    const isTutor =
+      booking.hostId === user.id && user.roles.includes(Role.TUTOR);
+    const isStudent =
+      user.roles.includes(Role.STUDENT) &&
+      booking.participants.some((p) => p.id === user.id);
+
+    return {
+      isTutor,
+      isStudent,
+      isParticipant: isTutor || isStudent,
+    };
+  }
+
+  private static validateStatusForRole(
+    booking: BookingWithParticipants,
+    userRoles: { isTutor: boolean; isStudent: boolean }
+  ): void {
+    if (
+      userRoles.isTutor &&
+      booking.status !== BookingStatus.AWAITING_TUTOR_CONFIRMATION
+    ) {
       throw new BookingValidationError(
-        "PAST_TIME",
-        "Cannot reschedule to a past time"
+        "INVALID_STATUS_TUTOR",
+        `Tutor can only reschedule bookings that are ${BookingStatus.SCHEDULED} or ${BookingStatus.AWAITING_TUTOR_CONFIRMATION}`
+      );
+    }
+
+    if (
+      userRoles.isStudent &&
+      booking.status !== BookingStatus.AWAITING_STUDENT_CONFIRMATION
+    ) {
+      throw new BookingValidationError(
+        "INVALID_STATUS_STUDENT",
+        `Student can only reschedule bookings that are ${BookingStatus.SCHEDULED} or ${BookingStatus.AWAITING_STUDENT_CONFIRMATION}`
       );
     }
   }
 
-  private static calculateNewEndTime(
-    startTime: string,
+  private static calculateEndTime(
+    startTime: DateTime,
     type: BookingType
-  ): Date {
-    const endTime = new Date(startTime);
+  ): DateTime {
     const durationMinutes =
       type === BookingType.FREE_MEETING
         ? this.FREE_MEETING_DURATION_MINUTES
         : this.LESSON_DURATION_MINUTES;
 
-    endTime.setMinutes(endTime.getMinutes() + durationMinutes);
-    return endTime;
+    return startTime.plus({ minutes: durationMinutes });
   }
 
-  private static async validateNoConflicts(
+  private static async validateNoTimeConflicts(
     hostId: number,
-    startTime: Date,
-    endTime: Date,
+    startTime: DateTime,
+    endTime: DateTime,
     currentBookingId: number
   ): Promise<void> {
     const hasConflict = await prisma.booking.findFirst({
       where: {
-        id: { not: currentBookingId }, // Exclude current booking
+        id: { not: currentBookingId },
         hostId: hostId,
-        AND: [{ startTime: { lt: endTime } }, { endTime: { gt: startTime } }],
+        AND: [
+          { startTime: { lt: endTime.toJSDate() } },
+          { endTime: { gt: startTime.toJSDate() } },
+        ],
         status: {
           in: [
             BookingStatus.SCHEDULED,
@@ -181,13 +261,35 @@ export class RescheduleBookingCommandHandler {
     }
   }
 
-  private static determineNewStatus(
+  private static async updateBooking(
     booking: Booking,
-    currentUser: User
-  ): BookingStatus {
-    const isTutor = booking.hostId === currentUser.id;
-    return isTutor
-      ? BookingStatus.AWAITING_STUDENT_CONFIRMATION
-      : BookingStatus.AWAITING_TUTOR_CONFIRMATION;
+    currentUser: User,
+    newStartTime: DateTime,
+    newEndTime: DateTime
+  ): Promise<Booking> {
+    return await prisma.booking.update({
+      where: { id: booking.id },
+      data: {
+        startTime: newStartTime.toJSDate(),
+        endTime: newEndTime.toJSDate(),
+        status: this.determineNewStatus(booking, currentUser),
+      },
+      include: {
+        host: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        },
+        participants: {
+          select: {
+            id: true,
+            name: true,
+            image: true,
+          },
+        },
+      },
+    });
   }
 }

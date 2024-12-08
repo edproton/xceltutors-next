@@ -7,9 +7,10 @@ import {
   User,
 } from "@prisma/client";
 import { BookingValidationError } from "../errors";
+import { DateTime } from "luxon";
 
 export interface CreateBookingCommand {
-  startTime: string;
+  startTime: string; // ISO 8601 string
   currentUser: User;
   toUserId: number;
 }
@@ -20,15 +21,35 @@ export class CreateBookingCommandHandler {
   private static readonly LESSON_DURATION_MINUTES = 60;
 
   static async execute(command: CreateBookingCommand): Promise<Booking> {
-    await CreateBookingCommandHandler.validateBookingTime(command.startTime);
+    const startDateTime = DateTime.fromISO(command.startTime, { zone: "utc" });
+
+    if (!startDateTime.isValid) {
+      throw new BookingValidationError(
+        "INVALID_DATE",
+        "Invalid date format. Please provide ISO 8601 UTC date"
+      );
+    }
+
+    await this.validateBookingTime(startDateTime);
 
     const isTutor = command.currentUser.roles.includes(Role.TUTOR);
+    const toUser = await this.getAndValidateTargetUser(
+      command.currentUser,
+      command.toUserId
+    );
 
-    const hostId = isTutor ? command.currentUser.id : command.toUserId;
-    const participantId = isTutor ? command.toUserId : command.currentUser.id;
+    // Determine who is tutor and who is student
+    const tutorId = isTutor ? command.currentUser.id : command.toUserId;
+    const studentId = isTutor ? command.toUserId : command.currentUser.id;
 
-    await this.validateUsers(command.currentUser, participantId);
-    const bookingType = await this.determineBookingType(hostId, participantId);
+    // Check for any ongoing free meetings before proceeding
+    await this.validateNoOngoingFreeMeeting(tutorId, studentId);
+
+    // Validate meeting history
+    await this.validateMeetingHistory(isTutor, tutorId, studentId);
+
+    // Determine booking type
+    const bookingType = await this.determineBookingType(tutorId, studentId);
 
     if (bookingType === BookingType.FREE_MEETING && isTutor) {
       throw new BookingValidationError(
@@ -37,45 +58,52 @@ export class CreateBookingCommandHandler {
       );
     }
 
-    const endTime = this.calculateEndTime(command.startTime, bookingType);
-    await this.validateNoConflicts(
-      hostId,
-      new Date(command.startTime),
-      endTime
-    );
+    const endDateTime = this.calculateEndTime(startDateTime, bookingType);
+    await this.validateNoConflicts(tutorId, startDateTime, endDateTime);
+
+    const studentName =
+      command.currentUser.id === studentId
+        ? command.currentUser.name
+        : toUser.name;
+
+    const initialStatus = isTutor
+      ? BookingStatus.AWAITING_STUDENT_CONFIRMATION
+      : BookingStatus.AWAITING_TUTOR_CONFIRMATION;
 
     return await prisma.booking.create({
       data: {
-        startTime: new Date(command.startTime),
-        title: `Meeting with ${command.currentUser.name} | ${bookingType}`,
-        endTime: endTime,
-        hostId: hostId,
+        startTime: startDateTime.toJSDate(),
+        endTime: endDateTime.toJSDate(),
+        title: `Meeting with ${studentName} | ${bookingType}`,
+        hostId: tutorId,
         participants: {
           connect: {
-            id: participantId,
+            id: studentId,
           },
         },
         type: bookingType,
-        status: BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+        status: initialStatus,
       },
     });
   }
 
-  private static async validateBookingTime(startTime: string): Promise<void> {
-    const bookingDate = new Date(startTime);
-    const now = new Date();
+  private static async validateBookingTime(
+    startDateTime: DateTime
+  ): Promise<void> {
+    const now = DateTime.utc();
 
-    if (bookingDate < now) {
+    if (startDateTime < now) {
       throw new BookingValidationError(
         "PAST_BOOKING",
         "Cannot book a meeting in the past"
       );
     }
 
-    const maxBookingDate = new Date();
-    maxBookingDate.setMonth(now.getMonth() + this.MAX_ADVANCE_BOOKING_MONTHS);
+    const maxBookingDate = now.plus({
+      months: this.MAX_ADVANCE_BOOKING_MONTHS,
+    });
 
-    if (bookingDate > maxBookingDate) {
+    if (startDateTime > maxBookingDate) {
       throw new BookingValidationError(
         "ADVANCE_BOOKING_LIMIT",
         `Cannot book a meeting more than ${this.MAX_ADVANCE_BOOKING_MONTHS} month in advance`
@@ -83,43 +111,24 @@ export class CreateBookingCommandHandler {
     }
   }
 
-  private static async validateNoConflicts(
-    hostId: number,
-    startTime: Date,
-    endTime: Date
-  ): Promise<void> {
-    const hasConflict = await prisma.booking.findFirst({
-      where: {
-        hostId: hostId,
-        AND: [{ startTime: { lt: endTime } }, { endTime: { gt: startTime } }],
-        status: {
-          in: [
-            BookingStatus.COMPLETED,
-            BookingStatus.SCHEDULED,
-            BookingStatus.AWAITING_TUTOR_CONFIRMATION,
-            BookingStatus.AWAITING_STUDENT_CONFIRMATION,
-          ],
-        },
-      },
-    });
-
-    if (hasConflict) {
-      throw new BookingValidationError(
-        "BOOKING_CONFLICT",
-        "A booking already exists at this time"
-      );
-    }
-  }
-
-  private static async validateUsers(
+  private static async getAndValidateTargetUser(
     currentUser: User,
     targetUserId: number
-  ): Promise<void> {
+  ): Promise<User> {
+    if (currentUser.id === targetUserId) {
+      throw new BookingValidationError(
+        "SELF_BOOKING",
+        "Cannot book a meeting with yourself"
+      );
+    }
+
     const targetUser = await prisma.user.findUnique({
       where: { id: targetUserId },
       select: {
         id: true,
         roles: true,
+        name: true,
+        image: true,
       },
     });
 
@@ -130,7 +139,6 @@ export class CreateBookingCommandHandler {
       );
     }
 
-    // Validate user roles match expectations
     if (
       currentUser.roles.includes(Role.TUTOR) &&
       targetUser.roles.includes(Role.TUTOR)
@@ -140,35 +148,97 @@ export class CreateBookingCommandHandler {
         "Tutors cannot book sessions with other tutors"
       );
     }
+
+    return targetUser;
   }
 
-  private static calculateEndTime(startTime: string, type: BookingType): Date {
-    const endTime = new Date(startTime);
+  private static async validateMeetingHistory(
+    isTutor: boolean,
+    tutorId: number,
+    studentId: number
+  ): Promise<void> {
+    if (!isTutor) {
+      return; // Students can book first meeting
+    }
+
+    const previousMeeting = await prisma.booking.findFirst({
+      where: {
+        hostId: tutorId,
+        participants: {
+          some: {
+            id: studentId,
+          },
+        },
+        status: {
+          in: [BookingStatus.COMPLETED, BookingStatus.SCHEDULED],
+        },
+      },
+    });
+
+    if (!previousMeeting) {
+      throw new BookingValidationError(
+        "NO_PREVIOUS_MEETING",
+        "Tutors cannot book meetings with students they haven't met before"
+      );
+    }
+  }
+
+  private static async validateNoOngoingFreeMeeting(
+    tutorId: number,
+    studentId: number
+  ): Promise<void> {
+    const ongoingFreeMeeting = await prisma.booking.findFirst({
+      where: {
+        hostId: tutorId,
+        type: BookingType.FREE_MEETING,
+        participants: {
+          some: {
+            id: studentId,
+          },
+        },
+        status: {
+          in: [
+            BookingStatus.SCHEDULED,
+            BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+            BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+          ],
+        },
+      },
+    });
+
+    if (ongoingFreeMeeting) {
+      throw new BookingValidationError(
+        "ONGOING_FREE_MEETING",
+        "Cannot book new meetings while there is an ongoing free meeting. Please complete or cancel the existing free meeting first."
+      );
+    }
+  }
+
+  private static calculateEndTime(
+    startDateTime: DateTime,
+    type: BookingType
+  ): DateTime {
     const durationMinutes =
       type === BookingType.FREE_MEETING
         ? this.FREE_MEETING_DURATION_MINUTES
         : this.LESSON_DURATION_MINUTES;
 
-    endTime.setMinutes(endTime.getMinutes() + durationMinutes);
-    return endTime;
+    return startDateTime.plus({ minutes: durationMinutes });
   }
 
-  private static async determineBookingType(
-    hostId: number,
-    participantId: number
-  ): Promise<BookingType> {
-    const hasHadFreeMeeting = await prisma.booking.findFirst({
-      select: {
-        id: true,
-      },
+  private static async validateNoConflicts(
+    tutorId: number,
+    startDateTime: DateTime,
+    endDateTime: DateTime
+  ): Promise<void> {
+    // Check for any booking at this time, including completed ones
+    const hasConflict = await prisma.booking.findFirst({
       where: {
-        hostId: hostId,
-        type: BookingType.FREE_MEETING,
-        participants: {
-          some: {
-            id: participantId,
-          },
-        },
+        hostId: tutorId,
+        AND: [
+          { startTime: { lt: endDateTime.toJSDate() } },
+          { endTime: { gt: startDateTime.toJSDate() } },
+        ],
         status: {
           in: [
             BookingStatus.COMPLETED,
@@ -178,8 +248,41 @@ export class CreateBookingCommandHandler {
           ],
         },
       },
+      select: {
+        id: true,
+        startTime: true,
+        status: true,
+      },
     });
 
-    return hasHadFreeMeeting ? BookingType.LESSON : BookingType.FREE_MEETING;
+    if (hasConflict) {
+      const conflictDateTime = DateTime.fromJSDate(hasConflict.startTime, {
+        zone: "utc",
+      });
+      throw new BookingValidationError(
+        "BOOKING_CONFLICT",
+        `Cannot book at this time - there is a ${hasConflict.status} booking at ${conflictDateTime.toFormat("HH:mm")} UTC`
+      );
+    }
+  }
+
+  private static async determineBookingType(
+    tutorId: number,
+    studentId: number
+  ): Promise<BookingType> {
+    const completedFreeMeeting = await prisma.booking.findFirst({
+      where: {
+        hostId: tutorId,
+        type: BookingType.FREE_MEETING,
+        participants: {
+          some: {
+            id: studentId,
+          },
+        },
+        status: BookingStatus.COMPLETED,
+      },
+    });
+
+    return completedFreeMeeting ? BookingType.LESSON : BookingType.FREE_MEETING;
   }
 }

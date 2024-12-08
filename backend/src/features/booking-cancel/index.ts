@@ -40,7 +40,10 @@ export class CancelBookingCommandHandler {
 
     await this.validateUserAuthorization(command.currentUser, booking);
     await this.validateBookingStatus(booking);
-    await this.validateAndCancelPayment(booking);
+
+    if (booking.status === BookingStatus.AWAITING_PAYMENT) {
+      await this.validateAndCancelPayment(booking);
+    }
 
     return await prisma.booking.update({
       where: { id: booking.id },

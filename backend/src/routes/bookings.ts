@@ -9,7 +9,8 @@ import { RequestRefundCommandHandler } from "@/features/booking-refund";
 import { ConfirmBookingCommandHandler } from "@/features/booking-confirm";
 import { authMiddleware } from "@/middlewares/auth";
 import { GetBookingByIdCommandHandler } from "@/features/booking-get-by-id";
-import { BookingStatus, BookingType } from "@prisma/client";
+import { BookingStatus, BookingType, RecurrencePattern } from "@prisma/client";
+import { CreateRecurringBookingsCommandHandler } from "@/features/booking-recurring";
 
 const createBookingSchema = z.object({
   startTime: z
@@ -22,7 +23,16 @@ export const getBookingsSchema = z
   .object({
     page: z.coerce.number().positive().optional(),
     limit: z.coerce.number().positive().optional(),
-    status: z.nativeEnum(BookingStatus).optional(),
+    status: z
+      .union([
+        z.nativeEnum(BookingStatus), // Single status
+        z.nativeEnum(BookingStatus).array(), // Array of statuses
+      ])
+      .optional()
+      .transform((value) => {
+        if (!value) return undefined;
+        return Array.isArray(value) ? value : [value];
+      }),
     type: z.nativeEnum(BookingType).optional(),
     startDate: z.string().datetime().optional(),
     endDate: z.string().datetime().optional(),
@@ -48,6 +58,20 @@ const recheduleBookingSchema = z.object({
     .refine(
       (date) => new Date(date) > new Date(),
       "Cannot reschedule to a past time"
+    ),
+});
+
+const createRecurringBookingsSchema = z.object({
+  recurrencePattern: z.nativeEnum(RecurrencePattern, {
+    required_error: "Recurrence pattern is required",
+    invalid_type_error: "Invalid recurrence pattern",
+  }),
+  recurrenceEnd: z
+    .string()
+    .datetime({ message: "Invalid recurrenceEnd. Must be ISO 8601 format." })
+    .refine(
+      (date) => new Date(date) > new Date(),
+      "Recurrence end date must be in the future"
     ),
 });
 
@@ -79,7 +103,7 @@ export const bookingRoutes = new Hono()
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
       filters: {
-        status,
+        status: status ? status : undefined, // Now handles array
         type,
         startDate,
         endDate,
@@ -146,4 +170,28 @@ export const bookingRoutes = new Hono()
     });
 
     return c.json(result, 200);
-  });
+  })
+  .patch(
+    "/:id{[0-9]+}/recurring",
+    zValidator("json", createRecurringBookingsSchema),
+    async (c) => {
+      const id = parseInt(c.req.param("id"));
+      const { recurrencePattern, recurrenceEnd } = c.req.valid("json");
+
+      const recurringBookings =
+        await CreateRecurringBookingsCommandHandler.execute({
+          parentBookingId: id,
+          recurrencePattern,
+          recurrenceEnd: new Date(recurrenceEnd),
+          currentUser: c.var.user!,
+        });
+
+      return c.json(
+        {
+          message: "Recurring bookings created successfully",
+          bookings: recurringBookings,
+        },
+        200
+      );
+    }
+  );

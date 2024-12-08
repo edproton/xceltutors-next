@@ -15,7 +15,7 @@ export interface GetBookingsCommand {
   filters?: {
     startDate?: string;
     endDate?: string;
-    status?: BookingStatus;
+    status?: BookingStatus[];
     type?: BookingType;
     search?: string;
   };
@@ -58,8 +58,10 @@ export class GetBookingsCommandHandler {
 
     // Add dynamic filters if they exist
     if (command.filters) {
-      if (command.filters.status) {
-        where.status = command.filters.status;
+      if (command.filters.status?.length) {
+        where.status = {
+          in: command.filters.status,
+        };
       }
 
       if (command.filters.type) {

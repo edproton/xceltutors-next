@@ -16,6 +16,10 @@
     "backend"
   ],
   "dependencies": {
+    "luxon": "^3.5.0",
     "stripe": "^17.4.0"
+  },
+  "devDependencies": {
+    "@types/luxon": "^3.4.2"
   }
 }
