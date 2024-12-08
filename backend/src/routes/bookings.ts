@@ -9,8 +9,14 @@ import { RequestRefundCommandHandler } from "@/features/booking-refund";
 import { ConfirmBookingCommandHandler } from "@/features/booking-confirm";
 import { authMiddleware } from "@/middlewares/auth";
 import { GetBookingByIdCommandHandler } from "@/features/booking-get-by-id";
-import { BookingStatus, BookingType, RecurrencePattern } from "@prisma/client";
+import {
+  BookingStatus,
+  BookingType,
+  RecurrencePattern,
+  WeekDay,
+} from "@prisma/client";
 import { CreateRecurringBookingsCommandHandler } from "@/features/booking-recurring";
+import { DateTime } from "luxon";
 
 const createBookingSchema = z.object({
   startTime: z
@@ -61,18 +67,37 @@ const recheduleBookingSchema = z.object({
     ),
 });
 
+const timeSlotSchema = z.object({
+  weekDay: z.nativeEnum(WeekDay, {
+    required_error: "Weekday is required",
+    invalid_type_error: "Invalid weekday",
+  }),
+  startTime: z.string().regex(/^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/, {
+    message: "Start time must be in HH:mm format",
+  }),
+});
+
 const createRecurringBookingsSchema = z.object({
+  title: z.string().min(1, "Title is required"),
+  description: z.string().optional(),
+  hostId: z.number().int().positive("Host ID is required"),
+  startDate: z
+    .string()
+    .datetime({ message: "Invalid startDate. Must be ISO 8601 format." })
+    .transform((date) => new Date(date))
+    .refine((date) => {
+      const now = DateTime.now().setZone("utc").startOf("day");
+      const startDate = DateTime.fromJSDate(date).setZone("utc").startOf("day");
+      return startDate >= now;
+    }, "Start date must be today or in the future"),
   recurrencePattern: z.nativeEnum(RecurrencePattern, {
     required_error: "Recurrence pattern is required",
     invalid_type_error: "Invalid recurrence pattern",
   }),
-  recurrenceEnd: z
-    .string()
-    .datetime({ message: "Invalid recurrenceEnd. Must be ISO 8601 format." })
-    .refine(
-      (date) => new Date(date) > new Date(),
-      "Recurrence end date must be in the future"
-    ),
+  timeSlots: z
+    .array(timeSlotSchema)
+    .min(1, "At least one time slot is required")
+    .max(10, "Maximum 10 time slots allowed"),
 });
 
 export const bookingRoutes = new Hono()
@@ -171,18 +196,15 @@ export const bookingRoutes = new Hono()
 
     return c.json(result, 200);
   })
-  .patch(
-    "/:id{[0-9]+}/recurring",
+  .post(
+    "/recurring",
     zValidator("json", createRecurringBookingsSchema),
     async (c) => {
-      const id = parseInt(c.req.param("id"));
-      const { recurrencePattern, recurrenceEnd } = c.req.valid("json");
+      const payload = c.req.valid("json");
 
       const recurringBookings =
         await CreateRecurringBookingsCommandHandler.execute({
-          parentBookingId: id,
-          recurrencePattern,
-          recurrenceEnd: new Date(recurrenceEnd),
+          ...payload,
           currentUser: c.var.user!,
         });
 
@@ -191,7 +213,7 @@ export const bookingRoutes = new Hono()
           message: "Recurring bookings created successfully",
           bookings: recurringBookings,
         },
-        200
+        201
       );
     }
   );

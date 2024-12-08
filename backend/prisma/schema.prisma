@@ -16,50 +16,46 @@ enum Role {
 
 model ProviderAccount {
   id              Int       @id @default(autoincrement())
-  provider        String    // "google", "discord", etc
-  oauthProviderId String    // ID from the OAuth provider
+  provider        String
+  oauthProviderId String
   userId          Int
   email           String
   imageUrl        String?
   accessToken     String?
   refreshToken    String?
   expiresAt       DateTime?
-  
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  sessions        Session[]
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  sessions Session[]
 
   @@unique([provider, oauthProviderId])
 }
 
 model CredentialsProvider {
-  id              Int       @id @default(autoincrement())
-  userId          Int       @unique  // One credentials account per user
-  email           String    @unique
-  passwordHash    String
-  
-  // Security fields
+  id           Int    @id @default(autoincrement())
+  userId       Int    @unique
+  email        String @unique
+  passwordHash String
+
   failedAttempts  Int       @default(0)
   lastFailedAt    DateTime?
   lockedUntil     DateTime?
   lastPasswordAt  DateTime  @default(now())
-  passwordHistory Json?     // Array of previous password hashes
-  
-  // MFA fields
-  mfaEnabled      Boolean   @default(false)
-  mfaType         MFAType?
-  mfaSecret       String?   // TOTP secret or phone number
-  backupCodes     Json?     // Encrypted backup codes
-  
-  // Recovery fields
-  resetToken      String?   @unique
+  passwordHistory Json?
+
+  mfaEnabled  Boolean  @default(false)
+  mfaType     MFAType?
+  mfaSecret   String?
+  backupCodes Json?
+
+  resetToken          String?   @unique
   resetTokenExpiresAt DateTime?
-  
-  // Session management
-  sessions        Session[]
-  
-  user            User      @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt       DateTime  @default(now())
-  updatedAt       DateTime  @updatedAt
+
+  sessions Session[]
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }
 
 enum MFAType {
@@ -68,33 +64,32 @@ enum MFAType {
   EMAIL
 }
 
-// Update User model to include optional credentials
 model User {
-  id                Int                 @id @default(autoincrement())
-  sessions          Session[]
-  accounts          ProviderAccount[]   // OAuth providers
-  credentials       CredentialsProvider? // Password-based auth
-  image             String?
-  name              String
-  roles             Role[]
-  
-  hostedBookings    Booking[]          @relation("BookingHost")
-  joinedBookings    Booking[]          @relation("BookingParticipants")
+  id          Int                  @id @default(autoincrement())
+  sessions    Session[]
+  accounts    ProviderAccount[]
+  credentials CredentialsProvider?
+  image       String?
+  name        String
+  roles       Role[]
+
+  hostedBookings     Booking[]           @relation("BookingHost")
+  joinedBookings     Booking[]           @relation("BookingParticipants")
+  recurringTemplates RecurringTemplate[] @relation("TemplateHost")
 }
 
 model Session {
-  id                String             @id
-  userId            Int
-  expiresAt         DateTime
-  authenticationType AuthenticationType // To explicitly track the type
-  
-  // One of these must be set based on authenticationType
+  id                 String             @id
+  userId             Int
+  expiresAt          DateTime
+  authenticationType AuthenticationType
+
   providerAccountId Int?
   credentialsId     Int?
 
-  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  providerAccount   ProviderAccount?   @relation(fields: [providerAccountId], references: [id], onDelete: Cascade)
-  credentials       CredentialsProvider? @relation(fields: [credentialsId], references: [id], onDelete: Cascade)
+  user            User                 @relation(fields: [userId], references: [id], onDelete: Cascade)
+  providerAccount ProviderAccount?     @relation(fields: [providerAccountId], references: [id], onDelete: Cascade)
+  credentials     CredentialsProvider? @relation(fields: [credentialsId], references: [id], onDelete: Cascade)
 
   @@index([providerAccountId])
   @@index([credentialsId])
@@ -124,12 +119,52 @@ enum BookingStatus {
 }
 
 enum RecurrencePattern {
-  NONE // Default for free meetings or one-time bookings
+  NONE
   DAILY
   WEEKLY
   BIWEEKLY
   MONTHLY
-  CUSTOM
+}
+
+enum WeekDay {
+  MONDAY
+  TUESDAY
+  WEDNESDAY
+  THURSDAY
+  FRIDAY
+  SATURDAY
+  SUNDAY
+}
+
+model RecurringTimeSlot {
+  id         Int               @id @default(autoincrement())
+  weekDay    WeekDay
+  startTime  DateTime // Store only the time part
+  templateId Int
+  template   RecurringTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
+
+  @@unique([templateId, weekDay, startTime])
+}
+
+model RecurringTemplate {
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  title       String
+  description String?
+
+  hostId Int
+  host   User @relation("TemplateHost", fields: [hostId], references: [id])
+
+  // Template configuration
+  recurrencePattern RecurrencePattern
+  timeSlots         RecurringTimeSlot[]
+  durationMinutes   Int                 @default(60)
+
+  // Link to generated bookings
+  bookings Booking[] @relation("TemplateBookings")
+
+  @@index([hostId])
 }
 
 model Payment {
@@ -137,16 +172,13 @@ model Payment {
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  // Stripe-specific fields
   sessionId       String? @unique
   paymentIntentId String? @unique
   chargeId        String?
   sessionUrl      String?
 
-  // Payment metadata
-  metadata Json? // Stores additional payment information as JSON
+  metadata Json?
 
-  // Booking relationship
   bookingId Int     @unique
   booking   Booking @relation(fields: [bookingId], references: [id])
 }
@@ -160,26 +192,20 @@ model Booking {
   startTime   DateTime
   endTime     DateTime
 
-  // Enum fields
   type   BookingType
   status BookingStatus
 
-  // Host relationship
-  hostId Int
-  host   User @relation("BookingHost", fields: [hostId], references: [id])
-
-  // Participants many-to-many relationship
+  hostId       Int
+  host         User   @relation("BookingHost", fields: [hostId], references: [id])
   participants User[] @relation("BookingParticipants")
 
-  // Recurring booking fields
-  recurrence         RecurrencePattern @default(NONE)
-  recurrenceEnd      DateTime?
-  parentBookingId    Int?
-  parentBooking      Booking?          @relation("ParentBooking", fields: [parentBookingId], references: [id])
-  recurringInstances Booking[]         @relation("ParentBooking")
+  // Template relationship for recurring lessons
+  recurringTemplateId Int?
+  recurringTemplate   RecurringTemplate? @relation("TemplateBookings", fields: [recurringTemplateId], references: [id])
 
-  // Payment relationship
   payment Payment?
 
   @@index([hostId])
+  @@index([recurringTemplateId])
+  @@index([startTime, endTime])
 }

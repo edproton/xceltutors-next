@@ -16,7 +16,7 @@ const app = new Hono().use(logger()).use(
   "*",
   cors({
     origin: env.FRONTEND_URL,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"], // Added PATCH
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"],
     allowHeaders: ["Content-Type", "Authorization"],
     exposeHeaders: ["X-API-Version"],
     credentials: true,
@@ -39,6 +39,8 @@ app.onError((err, c) => {
       400
     );
   }
+
+  console.error(err);
 
   return c.json(
     {
