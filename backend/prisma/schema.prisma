@@ -119,8 +119,6 @@ enum BookingStatus {
 }
 
 enum RecurrencePattern {
-  NONE
-  DAILY
   WEEKLY
   BIWEEKLY
   MONTHLY
@@ -136,6 +134,35 @@ enum WeekDay {
   SUNDAY
 }
 
+enum RecurringTemplateStatus {
+  ACTIVE
+  INACTIVE
+}
+
+model RecurringTemplate {
+  id          Int      @id @default(autoincrement())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  title       String
+  description String?
+
+  // Host of the recurring booking
+  hostId Int
+  host   User @relation("TemplateHost", fields: [hostId], references: [id])
+
+  status RecurringTemplateStatus @default(ACTIVE)
+
+  // Template configuration
+  recurrencePattern RecurrencePattern
+  timeSlots         RecurringTimeSlot[]
+  durationMinutes   Int                 @default(60)
+
+  // Link to generated bookings
+  bookings Booking[] @relation("RecurringBookings")
+
+  @@index([hostId])
+}
+
 model RecurringTimeSlot {
   id         Int               @id @default(autoincrement())
   weekDay    WeekDay
@@ -146,25 +173,35 @@ model RecurringTimeSlot {
   @@unique([templateId, weekDay, startTime])
 }
 
-model RecurringTemplate {
+model Booking {
   id          Int      @id @default(autoincrement())
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
   title       String
   description String?
+  startTime   DateTime
+  endTime     DateTime
 
+  type   BookingType
+  status BookingStatus
+
+  // Host relationship
   hostId Int
-  host   User @relation("TemplateHost", fields: [hostId], references: [id])
+  host   User @relation("BookingHost", fields: [hostId], references: [id])
 
-  // Template configuration
-  recurrencePattern RecurrencePattern
-  timeSlots         RecurringTimeSlot[]
-  durationMinutes   Int                 @default(60)
+  // Participants
+  participants User[] @relation("BookingParticipants")
 
-  // Link to generated bookings
-  bookings Booking[] @relation("TemplateBookings")
+  // Recurring booking relationship - null for one-off bookings
+  recurringTemplateId Int?
+  recurringTemplate   RecurringTemplate? @relation("RecurringBookings", fields: [recurringTemplateId], references: [id])
+
+  // Payment relationship
+  payment Payment?
 
   @@index([hostId])
+  @@index([recurringTemplateId])
+  @@index([startTime, endTime])
 }
 
 model Payment {
@@ -181,31 +218,4 @@ model Payment {
 
   bookingId Int     @unique
   booking   Booking @relation(fields: [bookingId], references: [id])
-}
-
-model Booking {
-  id          Int      @id @default(autoincrement())
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
-  title       String
-  description String?
-  startTime   DateTime
-  endTime     DateTime
-
-  type   BookingType
-  status BookingStatus
-
-  hostId       Int
-  host         User   @relation("BookingHost", fields: [hostId], references: [id])
-  participants User[] @relation("BookingParticipants")
-
-  // Template relationship for recurring lessons
-  recurringTemplateId Int?
-  recurringTemplate   RecurringTemplate? @relation("TemplateBookings", fields: [recurringTemplateId], references: [id])
-
-  payment Payment?
-
-  @@index([hostId])
-  @@index([recurringTemplateId])
-  @@index([startTime, endTime])
 }

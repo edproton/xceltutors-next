@@ -1,4 +1,4 @@
-import { prisma } from "@/lib/prisma";
+import { prisma, Transaction } from "@/lib/prisma";
 import {
   BookingStatus,
   BookingType,
@@ -6,19 +6,31 @@ import {
   User,
   WeekDay,
   Role,
+  RecurringTemplateStatus,
 } from "@prisma/client";
 import { BookingValidationError } from "../errors";
+import { DateTime } from "luxon";
 
 type TimeSlot = {
   weekDay: WeekDay;
   startTime: string; // HH:mm in UTC
 };
 
+type BookingDate = {
+  startTime: DateTime;
+  endTime: DateTime;
+};
+
+interface TimeSlotConflict {
+  startTime: string; // ISO string
+  alternativeTimes?: string[]; // HH:mm in UTC
+}
+
 export interface CreateRecurringBookingsCommand {
   title: string;
   description?: string;
   hostId: number;
-  startDate: Date;
+  startDate: string; // ISO string
   recurrencePattern: RecurrencePattern;
   timeSlots: TimeSlot[];
   currentUser: User;
@@ -26,6 +38,7 @@ export interface CreateRecurringBookingsCommand {
 
 export interface RecurringBookingsResult {
   recurringTemplateId: number;
+  conflicts?: TimeSlotConflict[];
 }
 
 export class CreateRecurringBookingsCommandHandler {
@@ -38,122 +51,255 @@ export class CreateRecurringBookingsCommandHandler {
     await this.validateCommand(command);
 
     return await prisma.$transaction(async (tx) => {
-      // Check for prior booking existence efficiently
-      const priorBooking = await tx.booking.findFirst({
-        where: {
-          hostId: command.hostId,
-          participants: { some: { id: command.currentUser.id } },
-          type: BookingType.LESSON,
-          status: { in: [BookingStatus.COMPLETED, BookingStatus.SCHEDULED] },
-        },
-        select: { id: true },
-      });
+      await this.validatePriorBooking(command, tx);
 
-      if (!priorBooking) {
-        throw new BookingValidationError(
-          "NO_PRIOR_BOOKING",
-          "You must have at least one lesson booking with this tutor before creating recurring bookings"
-        );
-      }
-
-      // Generate booking dates first to check conflicts
+      const startDate = DateTime.fromISO(command.startDate);
       const bookingDates = this.generateBookingDates(
         command.timeSlots,
-        command.startDate,
+        startDate,
         command.recurrencePattern
       );
 
-      // Check conflicts in a single query
+      const conflicts = await this.checkConflicts(bookingDates, command, tx);
+      if (conflicts.length > 0) {
+        return { recurringTemplateId: -1, conflicts };
+      }
+
+      const template = await this.createTemplateAndBookings(
+        command,
+        bookingDates,
+        tx
+      );
+
+      return { recurringTemplateId: template.id };
+    });
+  }
+
+  private static async validatePriorBooking(
+    command: CreateRecurringBookingsCommand,
+    tx: Transaction
+  ): Promise<void> {
+    const priorBooking = await tx.booking.findFirst({
+      where: {
+        hostId: command.hostId,
+        participants: { some: { id: command.currentUser.id } },
+        status: { in: [BookingStatus.COMPLETED, BookingStatus.SCHEDULED] },
+      },
+      select: { id: true },
+    });
+
+    if (!priorBooking) {
+      throw new BookingValidationError(
+        "NO_PRIOR_BOOKING",
+        "You must have at least one completed lesson with this tutor"
+      );
+    }
+  }
+
+  private static async checkConflicts(
+    bookingDates: BookingDate[],
+    command: CreateRecurringBookingsCommand,
+    tx: Transaction
+  ): Promise<TimeSlotConflict[]> {
+    const conflicts: TimeSlotConflict[] = [];
+
+    for (const { startTime, endTime } of bookingDates) {
       const conflictingBooking = await tx.booking.findFirst({
         where: {
           OR: [
             {
               hostId: command.hostId,
-              startTime: {
-                in: bookingDates.map((date) => date.startTime),
-              },
+              OR: [
+                {
+                  AND: [
+                    { startTime: { lte: startTime.toJSDate() } },
+                    { endTime: { gt: startTime.toJSDate() } },
+                  ],
+                },
+                {
+                  AND: [
+                    { startTime: { lt: endTime.toJSDate() } },
+                    { endTime: { gte: endTime.toJSDate() } },
+                  ],
+                },
+              ],
               status: {
-                notIn: [BookingStatus.CANCELED, BookingStatus.REFUNDED],
+                in: [
+                  BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+                  BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+                  BookingStatus.AWAITING_PAYMENT,
+                  BookingStatus.SCHEDULED,
+                ],
               },
             },
             {
               participants: { some: { id: command.currentUser.id } },
-              startTime: {
-                in: bookingDates.map((date) => date.startTime),
-              },
+              OR: [
+                {
+                  AND: [
+                    { startTime: { lte: startTime.toJSDate() } },
+                    { endTime: { gt: startTime.toJSDate() } },
+                  ],
+                },
+                {
+                  AND: [
+                    { startTime: { lt: endTime.toJSDate() } },
+                    { endTime: { gte: endTime.toJSDate() } },
+                  ],
+                },
+              ],
               status: {
-                notIn: [BookingStatus.CANCELED, BookingStatus.REFUNDED],
+                in: [
+                  BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+                  BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+                  BookingStatus.AWAITING_PAYMENT,
+                  BookingStatus.SCHEDULED,
+                ],
               },
             },
           ],
         },
-        select: {
-          id: true,
-          hostId: true,
-        },
       });
 
       if (conflictingBooking) {
-        throw new BookingValidationError(
-          "TIME_SLOT_CONFLICT",
-          conflictingBooking.hostId !== command.hostId
-            ? "You have existing bookings that conflict with these time slots"
-            : "The tutor is not available during these time slots"
+        const alternatives = await this.findAlternativeTimes(
+          startTime,
+          command,
+          tx
         );
-      }
 
-      // Create template and bookings in a single transaction
-      const recurringTemplate = await tx.recurringTemplate.create({
-        data: {
-          title: command.title,
-          description: command.description,
-          hostId: command.hostId,
-          recurrencePattern: command.recurrencePattern,
-          durationMinutes: this.LESSON_DURATION_MINUTES,
-          timeSlots: {
-            create: command.timeSlots.map((slot) => ({
-              weekDay: slot.weekDay,
-              startTime: new Date(`1970-01-01T${slot.startTime}Z`),
-            })),
-          },
-          bookings: {
-            create: bookingDates.map(({ startTime, endTime }) => ({
-              title: command.title,
-              description: command.description,
-              startTime,
-              endTime,
-              type: BookingType.LESSON,
-              status: BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+        conflicts.push({
+          startTime: startTime.toISO()!,
+          alternativeTimes: alternatives,
+        });
+      }
+    }
+
+    return conflicts;
+  }
+
+  private static async findAlternativeTimes(
+    originalTime: DateTime,
+    command: CreateRecurringBookingsCommand,
+    tx: Transaction
+  ): Promise<string[]> {
+    const alternatives: string[] = [];
+    const checkTimes = [-2, -1, 1, 2];
+
+    for (const hourOffset of checkTimes) {
+      const alternativeTime = originalTime.plus({ hours: hourOffset });
+
+      const conflict = await tx.booking.findFirst({
+        where: {
+          OR: [
+            {
               hostId: command.hostId,
-              participants: {
-                connect: [{ id: command.currentUser.id }],
+              startTime: alternativeTime.toJSDate(),
+              status: {
+                notIn: [
+                  BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+                  BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+                  BookingStatus.AWAITING_PAYMENT,
+                  BookingStatus.SCHEDULED,
+                ],
               },
-            })),
-          },
+            },
+            {
+              participants: { some: { id: command.currentUser.id } },
+              startTime: alternativeTime.toJSDate(),
+              status: {
+                notIn: [
+                  BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+                  BookingStatus.AWAITING_TUTOR_CONFIRMATION,
+                  BookingStatus.AWAITING_PAYMENT,
+                  BookingStatus.SCHEDULED,
+                ],
+              },
+            },
+          ],
         },
-        select: { id: true },
       });
 
-      return { recurringTemplateId: recurringTemplate.id };
+      if (!conflict) {
+        alternatives.push(alternativeTime.toFormat("HH:mm"));
+      }
+    }
+
+    return alternatives;
+  }
+
+  private static async createTemplateAndBookings(
+    command: CreateRecurringBookingsCommand,
+    bookingDates: BookingDate[],
+    tx: Transaction
+  ) {
+    return await tx.recurringTemplate.create({
+      data: {
+        title: command.title,
+        description: command.description,
+        hostId: command.hostId,
+        status: RecurringTemplateStatus.ACTIVE,
+        recurrencePattern: command.recurrencePattern,
+        durationMinutes: this.LESSON_DURATION_MINUTES,
+        timeSlots: {
+          create: command.timeSlots.map((slot) => ({
+            weekDay: slot.weekDay,
+            startTime: DateTime.fromFormat(slot.startTime, "HH:mm", {
+              zone: "UTC",
+            }).toJSDate(),
+          })),
+        },
+        bookings: {
+          create: bookingDates.map(({ startTime, endTime }) => ({
+            title: command.title,
+            description: command.description,
+            startTime: startTime.toJSDate(),
+            endTime: endTime.toJSDate(),
+            type: BookingType.LESSON,
+            status: BookingStatus.AWAITING_STUDENT_CONFIRMATION,
+            hostId: command.hostId,
+            participants: {
+              connect: [{ id: command.currentUser.id }],
+            },
+          })),
+        },
+      },
     });
   }
 
   private static async validateCommand(
     command: CreateRecurringBookingsCommand
   ): Promise<void> {
-    if (
-      command.hostId === command.currentUser.id ||
-      command.currentUser.roles.includes(Role.TUTOR) ||
-      command.recurrencePattern === RecurrencePattern.NONE ||
-      command.timeSlots.length === 0
-    ) {
+    const startDate = DateTime.fromISO(command.startDate);
+
+    if (command.hostId === command.currentUser.id) {
       throw new BookingValidationError(
         "INVALID_INPUT",
-        "Invalid command parameters"
+        "Host cannot book lessons with themselves"
       );
     }
 
-    // Efficient validation query
+    if (command.currentUser.roles.includes(Role.TUTOR)) {
+      throw new BookingValidationError(
+        "INVALID_INPUT",
+        "Tutors cannot create recurring lessons"
+      );
+    }
+
+    if (command.timeSlots.length === 0) {
+      throw new BookingValidationError(
+        "INVALID_TIME_SLOTS",
+        "At least one time slot must be provided"
+      );
+    }
+
+    if (!this.isValidStartDate(startDate)) {
+      throw new BookingValidationError(
+        "INVALID_START_DATE",
+        "Start date must be in the future and within the next month"
+      );
+    }
+
     const users = await prisma.user.findMany({
       where: {
         id: { in: [command.hostId, command.currentUser.id] },
@@ -182,72 +328,75 @@ export class CreateRecurringBookingsCommandHandler {
     }
   }
 
+  private static isValidStartDate(startDate: DateTime): boolean {
+    const now = DateTime.now().setZone("UTC");
+    const maxDate = now.plus({ months: this.MAX_RECURRENCE_MONTHS });
+
+    return startDate >= now && startDate <= maxDate;
+  }
+
   private static generateBookingDates(
     timeSlots: TimeSlot[],
-    startDate: Date,
+    startDate: DateTime,
     pattern: RecurrencePattern
-  ): Array<{ startTime: Date; endTime: Date }> {
-    const dates: Array<{ startTime: Date; endTime: Date }> = [];
-    const endDate = new Date(startDate);
-    endDate.setMonth(endDate.getMonth() + this.MAX_RECURRENCE_MONTHS);
+  ): BookingDate[] {
+    const dates: BookingDate[] = [];
+    const endDate = startDate.plus({ months: this.MAX_RECURRENCE_MONTHS });
 
     for (const slot of timeSlots) {
-      let currentDate = new Date(startDate);
+      let currentDate = startDate.startOf("day");
       const [hours, minutes] = slot.startTime.split(":").map(Number);
-      currentDate.setHours(hours, minutes, 0, 0);
+      currentDate = currentDate.set({ hour: hours, minute: minutes });
 
-      while (currentDate.getDay() !== getWeekdayNumber(slot.weekDay)) {
-        currentDate.setDate(currentDate.getDate() + 1);
+      while (currentDate.weekday !== getWeekdayNumber(slot.weekDay)) {
+        currentDate = currentDate.plus({ days: 1 });
       }
 
       while (currentDate < endDate) {
-        const endTime = new Date(currentDate);
-        endTime.setMinutes(endTime.getMinutes() + this.LESSON_DURATION_MINUTES);
-
-        dates.push({
-          startTime: new Date(currentDate),
-          endTime: new Date(endTime),
+        const endTime = currentDate.plus({
+          minutes: this.LESSON_DURATION_MINUTES,
         });
 
-        currentDate = getNextDate(currentDate, pattern);
+        dates.push({ startTime: currentDate, endTime });
+        currentDate = this.getNextDate(currentDate, pattern);
       }
     }
 
-    return dates;
+    return dates.sort(
+      (a, b) => a.startTime.toMillis() - b.startTime.toMillis()
+    );
+  }
+
+  private static getNextDate(
+    currentDate: DateTime,
+    pattern: RecurrencePattern
+  ): DateTime {
+    switch (pattern) {
+      case RecurrencePattern.WEEKLY:
+        return currentDate.plus({ weeks: 1 });
+      case RecurrencePattern.BIWEEKLY:
+        return currentDate.plus({ weeks: 2 });
+      case RecurrencePattern.MONTHLY:
+        return currentDate.plus({ months: 1 });
+      default:
+        throw new BookingValidationError(
+          "INVALID_RECURRENCE_PATTERN",
+          "Unsupported recurrence pattern"
+        );
+    }
   }
 }
 
-const getWeekdayNumber = (weekDay: WeekDay): number =>
-  ({
-    SUNDAY: 0,
+const getWeekdayNumber = (weekDay: WeekDay): number => {
+  // Luxon uses 1-7 for Monday-Sunday
+  const weekdayMap: Record<WeekDay, number> = {
     MONDAY: 1,
     TUESDAY: 2,
     WEDNESDAY: 3,
     THURSDAY: 4,
     FRIDAY: 5,
     SATURDAY: 6,
-  })[weekDay];
-
-const getNextDate = (currentDate: Date, pattern: RecurrencePattern): Date => {
-  const nextDate = new Date(currentDate);
-  const patternMap: Record<RecurrencePattern, number> = {
-    DAILY: 1,
-    WEEKLY: 7,
-    BIWEEKLY: 14,
-    MONTHLY: 0,
-    NONE: 0,
+    SUNDAY: 7,
   };
-
-  if (pattern === RecurrencePattern.MONTHLY) {
-    nextDate.setMonth(nextDate.getMonth() + 1);
-  } else if (patternMap[pattern]) {
-    nextDate.setDate(nextDate.getDate() + patternMap[pattern]);
-  } else {
-    throw new BookingValidationError(
-      "INVALID_RECURRENCE_PATTERN",
-      "Unsupported recurrence pattern"
-    );
-  }
-
-  return nextDate;
+  return weekdayMap[weekDay];
 };

@@ -91,10 +91,17 @@ export class CreateBookingCommandHandler {
       }),
     ]);
 
+    if (command.toUserId === command.currentUser.id) {
+      throw new BookingValidationError(
+        "YOURSELF_BOOKING",
+        "You cannot book a meeting with yourself"
+      );
+    }
+
     if (!targetUser) {
       throw new BookingValidationError(
         "USER_NOT_FOUND",
-        "Target user not found or you're trying to book with yourself"
+        "Target user not found"
       );
     }
 

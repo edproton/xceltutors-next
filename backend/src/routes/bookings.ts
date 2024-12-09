@@ -244,6 +244,7 @@ export const bookingRoutes = new Hono()
       const recurringBookings =
         await CreateRecurringBookingsCommandHandler.execute({
           ...payload,
+          startDate: payload.startDate.toISOString(),
           currentUser: c.var.user!,
         });
 

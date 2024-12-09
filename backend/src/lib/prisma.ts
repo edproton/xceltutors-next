@@ -1,7 +1,8 @@
-import { PrismaClient } from "@prisma/client";
+import { PrismaClient } from "@prisma/client/edge";
+import { withAccelerate } from "@prisma/extension-accelerate";
 
 // Create a singleton instance
-const prisma = new PrismaClient();
+const prisma = new PrismaClient().$extends(withAccelerate());
 
 // Handle potential connection errors
 prisma.$connect().catch((error) => {
@@ -10,3 +11,8 @@ prisma.$connect().catch((error) => {
 });
 
 export { prisma };
+
+export type Transaction = Omit<
+  typeof prisma,
+  "$connect" | "$disconnect" | "$on" | "$transaction" | "$use" | "$extends"
+>;

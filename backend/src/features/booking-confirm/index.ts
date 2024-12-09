@@ -10,7 +10,18 @@ import { BookingValidationError } from "../errors";
 import { createOrRegenerateStripeSessionForBooking } from "@/lib/stripe";
 
 type BookingWithParticipantsAndPayment = Prisma.BookingGetPayload<{
-  include: { participants: true; payment: true; host: true };
+  include: {
+    participants: {
+      select: {
+        id: true;
+        name: true;
+      };
+    };
+    payment: true;
+    host: {
+      select: { name: true };
+    };
+  };
 }>;
 
 export interface ConfirmBookingCommand {
@@ -28,8 +39,17 @@ export class ConfirmBookingCommandHandler {
     const booking = await prisma.booking.findUnique({
       where: { id: command.bookingId },
       include: {
-        host: true,
-        participants: true,
+        host: {
+          select: {
+            name: true,
+          },
+        },
+        participants: {
+          select: {
+            id: true,
+            name: true,
+          },
+        },
         payment: true,
       },
     });
