@@ -14,11 +14,14 @@
     "@prisma/extension-accelerate": "^1.2.1",
     "@prisma/extension-pulse": "^1.2.0",
     "hono": "^4.6.13",
+    "luxon": "^3.5.0",
     "prisma": "^6.0.1",
+    "stripe": "^17.4.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@faker-js/faker": "^9.3.0",
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "@types/luxon": "^3.4.2"
   }
 }

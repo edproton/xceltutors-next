@@ -205,6 +205,7 @@ export class CreateRecurringBookingsCommandHandler {
           create: bookingDates.map(({ startTime, endTime }) => ({
             title: command.title,
             description: command.description,
+            serviceId: 1,
             startTime: startTime.toJSDate(),
             endTime: endTime.toJSDate(),
             type: BookingType.LESSON,

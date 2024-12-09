@@ -83,32 +83,7 @@ function Expenses() {
         <CardHeader>
           <CardTitle>Expenses</CardTitle>
         </CardHeader>
-        <CardContent>
-          {isPending ? (
-            <ExpenseTableSkeleton />
-          ) : (
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead className="w-[100px]">ID</TableHead>
-                  <TableHead>Title</TableHead>
-                  <TableHead className="text-right">Amount</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {data.map((expense) => (
-                  <TableRow key={expense.id}>
-                    <TableCell className="font-medium">{expense.id}</TableCell>
-                    <TableCell>{expense.title}</TableCell>
-                    <TableCell className="text-right">
-                      ${expense.amount.toFixed(2)}
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          )}
-        </CardContent>
+        <CardContent>aqui</CardContent>
       </Card>
     </div>
   );

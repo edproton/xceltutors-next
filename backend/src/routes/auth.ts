@@ -5,7 +5,7 @@ import { deleteSessionCookie, setSessionCookie } from "@/lib/cookies";
 import { prisma } from "@/lib/prisma";
 import { googleAuth } from "@hono/oauth-providers/google";
 import { env } from "@/config";
-import { uploadToS3 } from "@/lib/upload";
+import { uploadToR2 } from "@/lib/upload";
 import { generateRandomString, hashString } from "@/lib/utils";
 import { createHash } from "crypto";
 import { AuthenticationType, Role } from "@prisma/client";
@@ -278,7 +278,7 @@ async function handleProfilePicture(
     const fileName = `profile-pictures/${providerAccountId}-${generateRandomString()}.${extension}`;
 
     // Upload the image to S3 and get the URL
-    const uploadedImageUrl = await uploadToS3(
+    const uploadedImageUrl = await uploadToR2(
       fileName,
       Buffer.from(buffer),
       contentType

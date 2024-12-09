@@ -180,6 +180,7 @@ export class CreateBookingCommandHandler {
         endTime: endDateTime.toJSDate(),
         title: `Booking ${startDateTime.toFormat("yyyy-MM-dd HH:mm")}`,
         hostId: tutorId,
+        serviceId: 1,
         participants: {
           connect: {
             id: studentId,
