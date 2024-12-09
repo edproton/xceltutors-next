@@ -16,13 +16,25 @@ type BookingWithPayment = Prisma.BookingGetPayload<{
  */
 export const createOrRegenerateStripeSessionForBooking = async (
   booking: Prisma.BookingGetPayload<{
-    include: {
-      payment: true;
+    select: {
+      id: true;
+      title: true;
+      type: true;
+      startTime: true;
+      endTime: true;
       host: {
         select: { name: true };
       };
       participants: {
-        select: { id: true; name: true };
+        select: {
+          id: true;
+          name: true;
+        };
+      };
+      payment: {
+        select: {
+          sessionId: true;
+        };
       };
     };
   }>
