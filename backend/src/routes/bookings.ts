@@ -111,14 +111,25 @@ const timeSlotSchema = z.object({
     }, "Cannot schedule a 1-hour lesson starting after 23:00"),
 });
 
-const overrideSchema = z.object({
-  conflictTime: z.string().datetime({
-    message: "Invalid conflictTime. Must be ISO 8601 format.",
-  }),
-  newStartTime: z.string().datetime({
-    message: "Invalid newStartTime. Must be ISO 8601 format.",
-  }),
-});
+const overrideSchema = z
+  .object({
+    conflictTime: z.string().datetime({
+      message: "Invalid conflictTime. Must be ISO 8601 format.",
+    }),
+    newStartTimeSlot: z
+      .string()
+      .regex(
+        /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/,
+        "Invalid time format. Must be HH:mm"
+      )
+      .optional(),
+    cancel: z.boolean().optional(),
+  })
+  .refine((data) => {
+    const hasNewTime = data.newStartTimeSlot !== undefined;
+    const hasCancel = data.cancel === true;
+    return (hasNewTime && !hasCancel) || (!hasNewTime && hasCancel);
+  }, "Exactly one of newStartTimeSlot or cancel must be provided");
 
 export const createRecurringBookingsSchema = z
   .object({
@@ -135,15 +146,26 @@ export const createRecurringBookingsSchema = z
   .refine((data) => {
     if (!data.overrides?.length) return true;
 
-    // Ensure all override dates fall within the recurrence pattern
     const startDate = DateTime.now().setZone("UTC");
     const endDate = startDate.plus({ months: 1 });
 
     return data.overrides.every((override) => {
-      const newDate = DateTime.fromISO(override.newStartTime);
-      return newDate >= startDate && newDate <= endDate;
+      const conflictDateTime = DateTime.fromISO(override.conflictTime);
+      return conflictDateTime >= startDate && conflictDateTime <= endDate;
     });
-  }, "Override dates must fall within the booking period");
+  }, "Override dates must fall within the booking period")
+  .refine((data) => {
+    if (!data.overrides?.length) return true;
+
+    return data.overrides.every((override) => {
+      if (override.cancel) return true;
+      if (!override.newStartTimeSlot) return false;
+
+      const [hours, minutes] = override.newStartTimeSlot.split(":").map(Number);
+      return minutes % 15 === 0 && !(hours === 23 && minutes > 0);
+    });
+  }, "Override time slots must be in 15-minute intervals and cannot start after 23:00");
+
 export const bookingRoutes = new Hono()
   .use(authMiddleware)
   .post("/", zValidator("json", createBookingSchema), async (c) => {

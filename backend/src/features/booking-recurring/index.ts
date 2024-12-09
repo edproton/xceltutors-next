@@ -17,11 +17,18 @@ import {
 } from "../helpers/booking-date-generator";
 import { ConflictChecker, TimeSlotConflict } from "../helpers/conflict-checker";
 import { RecurringTemplateValidator } from "../helpers/recurring-template-validator";
+import { BookingUtils } from "../utils/booking-utils";
 
 export type TimeSlot = {
   weekDay: WeekDay;
   startTime: string; // HH:mm in UTC
 };
+
+export interface Override {
+  conflictTime: string;
+  newStartTimeSlot?: string;
+  cancel?: boolean;
+}
 
 export interface CreateRecurringBookingsCommand {
   title: string;
@@ -30,30 +37,32 @@ export interface CreateRecurringBookingsCommand {
   recurrencePattern: RecurrencePattern;
   timeSlots: TimeSlot[];
   currentUser: User;
-  overrides?: Array<{
-    conflictTime: string;
-    newStartTime: string;
-  }>;
+  overrides?: Override[];
 }
-
 export interface RecurringBookingsResult {
   recurringTemplateId: number;
   conflicts?: TimeSlotConflict[];
 }
 
 export class CreateRecurringBookingsCommandHandler {
-  private static readonly LESSON_DURATION_MINUTES =
-    TimeSlotValidator.LESSON_DURATION_MINUTES;
-
   static async execute(
     command: CreateRecurringBookingsCommand
   ): Promise<RecurringBookingsResult> {
     await this.validateCommand(command);
 
     return await prisma.$transaction(async (tx) => {
+      // First check if there's a prior booking
       await this.validatePriorBooking(command, tx);
-      await this.validateExistingRecurringBookings(command, tx);
 
+      // Then check for conflicts with existing recurring templates
+      // This will throw if there's a conflict
+      await RecurringTemplateValidator.validateExistingTemplates(
+        command.timeSlots,
+        command.hostId,
+        tx
+      );
+
+      // Only if there are no recurring conflicts, proceed with booking generation
       const startDate = DateTime.now().setZone("UTC").startOf("day");
       const bookingDates = BookingDateGenerator.generateBookingDates(
         command.timeSlots,
@@ -61,6 +70,7 @@ export class CreateRecurringBookingsCommandHandler {
         command.recurrencePattern
       );
 
+      // Check for conflicts with individual bookings
       const conflicts = await ConflictChecker.checkConflicts(
         bookingDates,
         command,
@@ -229,30 +239,54 @@ export class CreateRecurringBookingsCommandHandler {
       };
     }
 
-    // Apply overrides to the booking dates instead of trying to modify existing bookings
-    const updatedBookingDates = bookingDates.map((date) => {
-      const dateStr = this.formatToUTCString(date.startTime);
-      const override = command.overrides?.find(
-        (o) => o.conflictTime === dateStr
-      );
+    // Filter out cancelled bookings and update times for rescheduled ones
+    const updatedBookingDates = bookingDates
+      .filter((date) => {
+        const dateStr = BookingUtils.formatToUTCString(date.startTime);
+        const override = command.overrides?.find(
+          (o) => o.conflictTime === dateStr
+        );
 
-      if (override) {
-        const newStartTime = DateTime.fromISO(override.newStartTime);
-        if (!TimeSlotValidator.isValidTimeSlot(newStartTime)) {
-          throw new BookingValidationError(
-            "INVALID_OVERRIDE_TIME",
-            `Invalid override time format: ${override.newStartTime}`
-          );
+        // Remove cancelled bookings
+        if (override?.cancel) {
+          return false;
         }
-        return {
-          startTime: newStartTime,
-          endTime: newStartTime.plus({
-            minutes: TimeSlotValidator.LESSON_DURATION_MINUTES,
-          }),
-        };
-      }
-      return date;
-    });
+
+        return true;
+      })
+      .map((date) => {
+        const dateStr = BookingUtils.formatToUTCString(date.startTime);
+        const override = command.overrides?.find(
+          (o) => o.conflictTime === dateStr
+        );
+
+        // Update rescheduled bookings
+        if (override?.newStartTimeSlot) {
+          const [hours, minutes] = override.newStartTimeSlot
+            .split(":")
+            .map(Number);
+          const newStartTime = date.startTime.set({
+            hour: hours,
+            minute: minutes,
+          });
+
+          if (!TimeSlotValidator.isValidTimeSlot(newStartTime)) {
+            throw new BookingValidationError(
+              "INVALID_OVERRIDE_TIME",
+              `Invalid override time format: ${override.newStartTimeSlot}`
+            );
+          }
+
+          return {
+            startTime: newStartTime,
+            endTime: newStartTime.plus({
+              minutes: TimeSlotValidator.LESSON_DURATION_MINUTES,
+            }),
+          };
+        }
+
+        return date;
+      });
 
     // Validate the new times don't have conflicts
     const newConflicts = await ConflictChecker.checkConflicts(
@@ -275,20 +309,5 @@ export class CreateRecurringBookingsCommandHandler {
     );
 
     return { recurringTemplateId: template.id };
-  }
-
-  private static formatToUTCString(dateTime: DateTime): string {
-    return dateTime.toUTC().toFormat("yyyy-MM-dd'T'HH:mm:ss.SSS'Z'");
-  }
-
-  private static async validateExistingRecurringBookings(
-    command: CreateRecurringBookingsCommand,
-    tx: Transaction
-  ): Promise<void> {
-    await RecurringTemplateValidator.validateExistingTemplates(
-      command.timeSlots,
-      command.hostId,
-      tx
-    );
   }
 }

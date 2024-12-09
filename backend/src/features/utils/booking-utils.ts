@@ -48,15 +48,18 @@ export class BookingUtils {
     startTime: DateTime | Date,
     durationMinutes: number
   ): TimeRange {
-    const start =
+    const dateTime =
       startTime instanceof DateTime
         ? startTime
         : DateTime.fromJSDate(startTime);
 
-    const end = start.plus({ minutes: durationMinutes });
+    // Convert to minutes since start of day for comparison
+    const startMinutes = dateTime.hour * 60 + dateTime.minute;
+    const endMinutes = startMinutes + durationMinutes;
+
     return {
-      start: start.toMillis(),
-      end: end.toMillis(),
+      start: startMinutes,
+      end: endMinutes,
     };
   }
 }

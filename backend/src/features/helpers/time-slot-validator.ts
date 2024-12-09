@@ -4,6 +4,7 @@ import { WeekDay } from "@prisma/client";
 import { BookingValidationError } from "../errors";
 import { TimeSlot } from "../booking-recurring";
 import { DateTime } from "luxon";
+import { TimeRange } from "../utils/booking-utils";
 
 type ValidMinutes = 0 | 15 | 30 | 45;
 
@@ -114,11 +115,11 @@ export class TimeSlotValidator {
     return `${time.hours.toString().padStart(2, "0")}:${time.minutes.toString().padStart(2, "0")}`;
   }
 
-  static getTimeRange(time: ParsedTime) {
-    const start = time.hours * 60 + time.minutes;
+  static getTimeRange(time: ParsedTime): TimeRange {
+    const startMinutes = time.hours * 60 + time.minutes;
     return {
-      start,
-      end: start + this.LESSON_DURATION_MINUTES,
+      start: startMinutes,
+      end: startMinutes + this.LESSON_DURATION_MINUTES,
     };
   }
 

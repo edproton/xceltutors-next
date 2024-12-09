@@ -25,7 +25,7 @@ export class RecurringTemplateValidator {
       const parsedTime = TimeSlotValidator.parseAndValidateTime(
         newSlot.startTime
       );
-      if (!parsedTime) continue; // Already validated in TimeSlotValidator
+      if (!parsedTime) continue;
 
       const newSlotRange = TimeSlotValidator.getTimeRange(parsedTime);
 
@@ -35,10 +35,11 @@ export class RecurringTemplateValidator {
           newSlot,
           newSlotRange
         );
+
         if (conflictingSlot) {
           throw new BookingValidationError(
-            "EXISTING_RECURRING_CONFLICT",
-            `Time slot ${newSlot.weekDay} ${newSlot.startTime} conflicts with existing recurring booking at ${this.formatConflictTime(conflictingSlot.startTime)} (Template ID: ${template.id})`
+            "RECURRING_TEMPLATE_CONFLICT", // Changed error code
+            `Cannot create recurring booking: Time slot ${newSlot.weekDay} ${newSlot.startTime} conflicts with existing recurring template (ID: ${template.id}). Please choose a different time.`
           );
         }
       }
@@ -62,12 +63,5 @@ export class RecurringTemplateValidator {
 
       return BookingUtils.hasTimeRangeOverlap(newSlotRange, existingRange);
     });
-  }
-
-  private static formatConflictTime(time: Date): string {
-    return BookingUtils.formatTimeHHMM(
-      time.getUTCHours(),
-      time.getUTCMinutes()
-    );
   }
 }
