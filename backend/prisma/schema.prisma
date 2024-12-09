@@ -170,6 +170,9 @@ model RecurringTimeSlot {
   templateId Int
   template   RecurringTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
+  @@index([weekDay, startTime])
+  @@index([templateId, weekDay])
+
   @@unique([templateId, weekDay, startTime])
 }
 
@@ -194,11 +197,15 @@ model Booking {
 
   // Recurring booking relationship - null for one-off bookings
   recurringTemplateId Int?
-  recurringTemplate   RecurringTemplate? @relation("RecurringBookings", fields: [recurringTemplateId], references: [id])
+  recurringTemplate   RecurringTemplate? @relation("RecurringBookings", fields: [recurringTemplateId], references: [id], onDelete: Cascade)
 
   // Payment relationship
   payment Payment?
 
+  @@index([hostId, status, type])
+  @@index([hostId, startTime])
+  @@index([hostId, status, startTime])
+  @@index([status, startTime])
   @@index([hostId])
   @@index([recurringTemplateId])
   @@index([startTime, endTime])
@@ -217,5 +224,5 @@ model Payment {
   metadata Json?
 
   bookingId Int     @unique
-  booking   Booking @relation(fields: [bookingId], references: [id])
+  booking   Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
 }

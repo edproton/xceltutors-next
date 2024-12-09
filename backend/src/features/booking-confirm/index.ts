@@ -1,5 +1,5 @@
 import { prisma } from "@/lib/prisma";
-import { Booking, BookingStatus, BookingType, User } from "@prisma/client";
+import { BookingStatus, BookingType, User } from "@prisma/client";
 import { BookingValidationError } from "../errors";
 import { createOrRegenerateStripeSessionForBooking } from "@/lib/stripe";
 

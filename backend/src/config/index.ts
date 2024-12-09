@@ -12,6 +12,8 @@ const configSchema = z.object({
 
       return originUrl.port ? parseInt(originUrl.port, 10) : 5000;
     }),
+  DATABASE_URL: z.string().url(),
+  PULSE_API_KEY: z.string().min(1),
   GOOGLE_CLIENT_ID: z.string().min(1),
   GOOGLE_CLIENT_SECRET: z.string().min(1),
   AWS_ACCESS_KEY_ID: z.string().min(1),
