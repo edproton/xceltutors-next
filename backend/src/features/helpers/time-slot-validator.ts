@@ -1,5 +1,4 @@
 // src/features/bookings/helpers/time-slot-validator.ts
-
 import { WeekDay } from "@prisma/client";
 import { BookingValidationError } from "../errors";
 import { TimeSlot } from "../booking-recurring";

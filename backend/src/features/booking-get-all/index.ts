@@ -1,15 +1,13 @@
 import { prisma } from "@/lib/prisma";
-import {
-  Booking,
-  BookingStatus,
-  BookingType,
-  User,
-  Prisma,
-} from "@prisma/client";
+import { BookingStatus, BookingType, User, Prisma } from "@prisma/client";
 import { DateTime } from "luxon";
 
 type BookingWithRelations = Prisma.BookingGetPayload<{
-  include: {
+  select: {
+    startTime: true;
+    endTime: true;
+    title: true;
+    status: true;
     host: {
       select: {
         id: true;
@@ -94,7 +92,11 @@ export class GetBookingsCommandHandler {
         skip,
         take: limit,
         orderBy,
-        include: {
+        select: {
+          startTime: true,
+          endTime: true,
+          title: true,
+          status: true,
           host: {
             select: {
               id: true,
