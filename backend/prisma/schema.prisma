@@ -76,6 +76,8 @@ model User {
   hostedBookings     Booking[]           @relation("BookingHost")
   joinedBookings     Booking[]           @relation("BookingParticipants")
   recurringTemplates RecurringTemplate[] @relation("TemplateHost")
+
+  Tutor Tutor?
 }
 
 model Session {
@@ -170,10 +172,55 @@ model RecurringTimeSlot {
   templateId Int
   template   RecurringTemplate @relation(fields: [templateId], references: [id], onDelete: Cascade)
 
+  @@unique([templateId, weekDay, startTime])
   @@index([weekDay, startTime])
   @@index([templateId, weekDay])
+}
 
-  @@unique([templateId, weekDay, startTime])
+model Subject {
+  id     Int     @id @default(autoincrement())
+  name   String  @unique
+  levels Level[]
+}
+
+model Level {
+  id        Int       @id @default(autoincrement())
+  name      String
+  subjectId Int
+  subject   Subject   @relation(fields: [subjectId], references: [id])
+  services  Service[]
+
+  @@unique([name, subjectId])
+  @@index([subjectId])
+}
+
+model Service {
+  id       Int       @id @default(autoincrement())
+  price    Decimal   @db.Decimal(10, 2)
+  levelId  Int
+  level    Level     @relation(fields: [levelId], references: [id])
+  tutorId  Int
+  tutor    Tutor     @relation(fields: [tutorId], references: [id])
+  bookings Booking[]
+
+  @@unique([tutorId, levelId])
+  @@index([tutorId])
+  @@index([levelId])
+}
+
+model Tutor {
+  id          Int       @id @default(autoincrement())
+  userId      Int       @unique
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  bio         String    @db.Text
+  mainSession String?   @db.Text
+  cardSession String?   @db.Text
+  services    Service[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
 }
 
 model Booking {
@@ -192,6 +239,10 @@ model Booking {
   hostId Int
   host   User @relation("BookingHost", fields: [hostId], references: [id])
 
+  // Service relationship
+  serviceId Int
+  service   Service @relation(fields: [serviceId], references: [id])
+
   // Participants
   participants User[] @relation("BookingParticipants")
 
@@ -207,6 +258,7 @@ model Booking {
   @@index([hostId, status, startTime])
   @@index([status, startTime])
   @@index([hostId])
+  @@index([serviceId])
   @@index([recurringTemplateId])
   @@index([startTime, endTime])
 }

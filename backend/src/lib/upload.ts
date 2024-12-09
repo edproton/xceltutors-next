@@ -1,39 +1,64 @@
 import { env } from "@/config";
-import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
+import {
+  PutObjectCommand,
+  S3Client,
+  CreateBucketCommand,
+  HeadBucketCommand,
+} from "@aws-sdk/client-s3";
 
-// Initialize the S3 client
-const s3Client = new S3Client({
-  region: env.AWS_REGION,
+// Initialize the R2 client
+const r2Client = new S3Client({
+  region: "auto",
   credentials: {
-    accessKeyId: env.AWS_ACCESS_KEY_ID,
-    secretAccessKey: env.AWS_SECRET_ACCESS_KEY,
+    accessKeyId: env.R2_ACCESS_KEY_ID,
+    secretAccessKey: env.R2_ACCESS_KEY_SECRET,
   },
+  endpoint: `https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com`,
+  forcePathStyle: true,
 });
 
-// Function to upload an image to S3 and return the public URL
-export async function uploadToS3(
-  key: string, // File name with prefix (e.g., "profile-pictures/image.jpg")
+async function ensureBucketExists(bucketName: string): Promise<void> {
+  try {
+    await r2Client.send(new HeadBucketCommand({ Bucket: bucketName }));
+  } catch (error: any) {
+    if (error.name === "NotFound" || error.name === "NoSuchBucket") {
+      try {
+        await r2Client.send(new CreateBucketCommand({ Bucket: bucketName }));
+        console.log(`[R2] Created bucket: ${bucketName}`);
+      } catch (createError) {
+        console.error("[R2] Error creating bucket:", createError);
+        throw createError;
+      }
+    } else {
+      console.error("[R2] Error checking bucket:", error);
+      throw error;
+    }
+  }
+}
+
+export async function uploadToR2(
+  key: string,
   fileBuffer: Buffer,
   mimeType: string,
-  bucketName: string = env.AWS_BUCKET_NAME
+  bucketName: string = env.R2_BUCKET_NAME
 ): Promise<string> {
   try {
-    // Upload the object to S3
+    await ensureBucketExists(bucketName);
+
     const command = new PutObjectCommand({
       Bucket: bucketName,
-      Key: key, // Ensure the prefix "profile-pictures/" is included
+      Key: key,
       Body: fileBuffer,
       ContentType: mimeType,
     });
 
-    await s3Client.send(command);
+    await r2Client.send(command);
 
-    // Return the public URL
-    const publicUrl = `https://${bucketName}.s3.${env.AWS_REGION}.amazonaws.com/${key}`;
-
+    // Use the new custom domain
+    const publicUrl = `https://${env.R2_PUBLIC_DOMAIN}/${key}`;
     return publicUrl;
   } catch (error) {
-    console.error("[S3] Error uploading image:", error);
+    console.error("[R2] Error uploading file:", error);
     throw error;
   }
 }

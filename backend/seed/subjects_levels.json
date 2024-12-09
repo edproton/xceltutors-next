@@ -1,0 +1,1092 @@
+[
+  {
+    "subject": "Accounting",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Arabic",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Art",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "BMAT (BioMedical Admissions)",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Biology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Business Studies",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Career Development",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "Mentoring"
+      }
+    ]
+  },
+  {
+    "subject": "Chemical Engineering",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Chemistry",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Classical Civilisation",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Classical Greek",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Computer Science",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Design & Technology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Drama",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Dutch",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "ELAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Economics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Electronics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "English",
+    "levels": [
+      {
+        "name": "11 Plus"
+      },
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS2"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "English Language",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      }
+    ]
+  },
+  {
+    "subject": "English Literature",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      }
+    ]
+  },
+  {
+    "subject": "English and World Literature",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Environmental Studies",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Extended Project Qualification",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "French",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Further Mathematics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "GAMSAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Geography",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Geology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "German",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Government and Politics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Graphic Design",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "HAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "History",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "History of Art",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Human Biology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "Scottish Highers"
+      }
+    ]
+  },
+  {
+    "subject": "ICT",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Italian",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Japanese",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "LNAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Latin",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Law",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "MAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "MLAT (Modern Languages)",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Mandarin",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Maths",
+    "levels": [
+      {
+        "name": "11 Plus"
+      },
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS2"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Media Studies",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Medical School Preparation",
+    "levels": [
+      {
+        "name": "Mentoring"
+      }
+    ]
+  },
+  {
+    "subject": "Medicine",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Music",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Oxbridge Preparation",
+    "levels": [
+      {
+        "name": "Mentoring"
+      }
+    ]
+  },
+  {
+    "subject": "PAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Personal Statements",
+    "levels": [
+      {
+        "name": "Mentoring"
+      }
+    ]
+  },
+  {
+    "subject": "Philosophy",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Philosophy and Ethics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Physical Education",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Physics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Polish",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Politics",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Portuguese",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Psychology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "Scottish Highers"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Python",
+    "levels": [
+      {
+        "name": "Mentoring"
+      }
+    ]
+  },
+  {
+    "subject": "Religious Studies",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Russian",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "STEP",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Sanskrit",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  },
+  {
+    "subject": "Science",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS2"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "National 4 and 5"
+      }
+    ]
+  },
+  {
+    "subject": "Sociology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "Spanish",
+    "levels": [
+      {
+        "name": "13 Plus"
+      },
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      },
+      {
+        "name": "IB"
+      },
+      {
+        "name": "KS3"
+      },
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "TSA Oxford",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Theory of Knowledge",
+    "levels": [
+      {
+        "name": "IB"
+      }
+    ]
+  },
+  {
+    "subject": "UCAT",
+    "levels": [
+      {
+        "name": "University"
+      }
+    ]
+  },
+  {
+    "subject": "Welsh Literature",
+    "levels": [
+      {
+        "name": "A Level"
+      }
+    ]
+  },
+  {
+    "subject": "Zoology",
+    "levels": [
+      {
+        "name": "A Level"
+      },
+      {
+        "name": "GCSE"
+      }
+    ]
+  }
+]

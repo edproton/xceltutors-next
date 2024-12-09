@@ -20,7 +20,15 @@ export const Route = createFileRoute("/expenses")({
 
 const getAllExpenses = async () => {
   await new Promise((resolve) => setTimeout(resolve, 1000));
-  const response = await api.expenses.$get();
+  const response = await api.bookings.$get({
+    query: {
+      include: {
+        student: true,
+        tutor: true,
+      },
+    },
+  });
+
   if (!response.ok) {
     throw new Error("Failed to fetch expenses");
   }
