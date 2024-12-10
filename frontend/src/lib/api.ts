@@ -1,7 +1,7 @@
 import { hc } from "hono/client";
 import { type ApiRoutes } from "@shared";
 
-const client = hc<ApiRoutes>(import.meta.env.VITE_API_BASE_URL);
+const client = hc<ApiRoutes>("http://localhost:3000");
 
 export const api = client.api.v1;
 api.bookings.$get({
