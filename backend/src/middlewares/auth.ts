@@ -2,7 +2,7 @@ import { Context, Next } from "hono";
 import { getCookie } from "hono/cookie";
 import { deleteSessionCookie } from "@/lib/cookies";
 import { HTTPException } from "hono/http-exception";
-import { validateSessionToken, SessionWithUser } from "@/lib/sessions";
+import { SessionWithUser, validateSessionToken } from "@/lib/sessions";
 import type { User } from "@prisma/client";
 
 declare module "hono" {
@@ -37,7 +37,7 @@ export const authMiddleware = async (c: Context, next: Next) => {
     }
 
     if (!sessionToken) {
-      throw new HTTPException(401, { message: "Authentication required" });
+      return next();
     }
 
     const session = await validateSessionToken(sessionToken.trim());
@@ -46,7 +46,8 @@ export const authMiddleware = async (c: Context, next: Next) => {
       if (getCookie(c, "session")) {
         deleteSessionCookie(c);
       }
-      throw new HTTPException(401, { message: "Invalid or expired session" });
+
+      return next();
     }
 
     c.set("user", session.user);

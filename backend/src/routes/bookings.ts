@@ -6,7 +6,7 @@ import {
   BookingSortField,
   GetBookingsCommandHandler,
   SortDirection,
-} from "@/features/booking-get-all";
+} from "@/features/bookings/bookings-get-all";
 import { RescheduleBookingCommandHandler } from "@/features/booking-reschedule";
 import { CancelBookingCommandHandler } from "@/features/booking-cancel";
 import { RequestRefundCommandHandler } from "@/features/booking-refund";
@@ -73,7 +73,7 @@ export const getBookingsSchema = z
     {
       message: "Start date must be before or equal to end date",
       path: ["startDate"],
-    }
+    },
   )
   .refine((data) => !data.sortField === !data.sortDirection, {
     message: "sortField and sortDirection must be provided together",
@@ -86,7 +86,7 @@ const recheduleBookingSchema = z.object({
     .datetime({ message: "Invalid startTime. Must be ISO 8601 format." })
     .refine(
       (date) => new Date(date) > new Date(),
-      "Cannot reschedule to a past time"
+      "Cannot reschedule to a past time",
     ),
 });
 
@@ -99,7 +99,7 @@ const timeSlotSchema = z.object({
     .string()
     .regex(
       /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/,
-      "Invalid time format. Must be HH:mm"
+      "Invalid time format. Must be HH:mm",
     )
     .refine((time) => {
       const [hours, minutes] = time.split(":").map(Number);
@@ -120,7 +120,7 @@ const overrideSchema = z
       .string()
       .regex(
         /^([0-1][0-9]|2[0-3]):[0-5][0-9]$/,
-        "Invalid time format. Must be HH:mm"
+        "Invalid time format. Must be HH:mm",
       )
       .optional(),
     cancel: z.boolean().optional(),
@@ -154,37 +154,24 @@ export const createRecurringBookingsSchema = z
       return conflictDateTime >= startDate && conflictDateTime <= endDate;
     });
   }, "Override dates must fall within the booking period")
-  .refine((data) => {
-    if (!data.overrides?.length) return true;
+  .refine(
+    (data) => {
+      if (!data.overrides?.length) return true;
 
-    return data.overrides.every((override) => {
-      if (override.cancel) return true;
-      if (!override.newStartTimeSlot) return false;
+      return data.overrides.every((override) => {
+        if (override.cancel) return true;
+        if (!override.newStartTimeSlot) return false;
 
-      const [hours, minutes] = override.newStartTimeSlot.split(":").map(Number);
-      return minutes % 15 === 0 && !(hours === 23 && minutes > 0);
-    });
-  }, "Override time slots must be in 15-minute intervals and cannot start after 23:00");
+        const [hours, minutes] = override.newStartTimeSlot.split(":").map(
+          Number,
+        );
+        return minutes % 15 === 0 && !(hours === 23 && minutes > 0);
+      });
+    },
+    "Override time slots must be in 15-minute intervals and cannot start after 23:00",
+  );
 
 export const bookingRoutes = new Hono()
-  .use(authMiddleware)
-  .post("/", zValidator("json", createBookingSchema), async (c) => {
-    const { startTime, toUserId } = c.req.valid("json");
-
-    const newBooking = await CreateBookingCommandHandler.execute({
-      startTime,
-      currentUser: c.var.user!,
-      toUserId,
-    });
-
-    return c.json(
-      {
-        message: "Booking created",
-        booking: newBooking,
-      },
-      201
-    );
-  })
   .get("/", zValidator("query", getBookingsSchema), async (c) => {
     const {
       page,
@@ -209,25 +196,33 @@ export const bookingRoutes = new Hono()
         endDate,
         search,
       },
-      sort:
-        sortField && sortDirection
-          ? {
-              field: sortField,
-              direction: sortDirection,
-            }
-          : undefined,
+      sort: sortField && sortDirection
+        ? {
+          field: sortField,
+          direction: sortDirection,
+        }
+        : undefined,
     });
 
     return c.json(bookings, 200);
   })
-  .get("/:id{[0-9]+}", async (c) => {
-    const id = parseInt(c.req.param("id"));
-    const booking = await GetBookingByIdCommandHandler.execute({
-      bookingId: id,
+  .use(authMiddleware)
+  .post("/", zValidator("json", createBookingSchema), async (c) => {
+    const { startTime, toUserId } = c.req.valid("json");
+
+    const newBooking = await CreateBookingCommandHandler.execute({
+      startTime,
       currentUser: c.var.user!,
+      toUserId,
     });
 
-    return c.json(booking, 200);
+    return c.json(
+      {
+        message: "Booking created",
+        booking: newBooking,
+      },
+      201,
+    );
   })
   .patch(
     "/:id{[0-9]+}/reschedule",
@@ -247,9 +242,9 @@ export const bookingRoutes = new Hono()
           message: "Booking rescheduled successfully.",
           booking: updatedBooking,
         },
-        200
+        200,
       );
-    }
+    },
   )
   .patch("/:id{[0-9]+}/cancel", async (c) => {
     const id = parseInt(c.req.param("id"));
@@ -295,7 +290,7 @@ export const bookingRoutes = new Hono()
             error: "Invalid recurrence pattern",
             conflicts: response.conflicts,
           },
-          400
+          400,
         );
       }
 
@@ -304,7 +299,7 @@ export const bookingRoutes = new Hono()
           message: "Recurring bookings created successfully",
           recurringTemplateId: response.recurringTemplateId,
         },
-        201
+        201,
       );
-    }
+    },
   );

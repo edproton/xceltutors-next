@@ -7,7 +7,7 @@ import { withPulse } from "@prisma/extension-pulse";
 const prisma = new PrismaClient().$extends(withAccelerate()).$extends(
   withPulse({
     apiKey: env.PULSE_API_KEY,
-  })
+  }),
 );
 
 // Handle potential connection errors
