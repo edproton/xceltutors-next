@@ -6,6 +6,7 @@ async function main() {
   const subjectsFilePath = join(process.cwd(), "seed", "subjects_levels.json");
   const avatarDirPath = join(process.cwd(), "seed", "avatars");
   try {
+    await SubjectsSeeder.seedSubjectsAndLevels(subjectsFilePath);
     await TutorSeeder.seedTutorsFromAvatars(avatarDirPath);
   } catch (error) {
     console.error("Seed failed:", error);

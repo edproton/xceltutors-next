@@ -6,7 +6,6 @@ import { BookingValidationError } from "@/features/errors";
 import { env } from "./config";
 import { authRoute } from "./routes/auth";
 import { bookingRoutes } from "./routes/bookings";
-import { expensesRoute } from "./routes/expeses";
 import { paymentRoute } from "./routes/payments";
 
 const API_VERSION = "v1";
@@ -53,11 +52,10 @@ app.onError((err, c) => {
   );
 });
 
-const apiRoutes = app
+app
   .basePath(`/api`)
   .route("/auth", authRoute)
   .basePath(`/${API_VERSION}`)
-  .route("/expenses", expensesRoute)
   .route("/bookings", bookingRoutes)
   .route("/payments", paymentRoute);
 
@@ -65,5 +63,3 @@ export default {
   port: env.PORT,
   fetch: app.fetch,
 };
-
-export type ApiRoutes = typeof apiRoutes;
