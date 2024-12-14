@@ -53,7 +53,6 @@ app.onError((err, c) => {
   );
 });
 
-// Rest of your code remains the same
 const apiRoutes = app
   .basePath(`/api`)
   .route("/auth", authRoute)
