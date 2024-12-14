@@ -1,18 +1,27 @@
 {
-  "name": "full-stack-app",
-  "private": true,
+  "name": "y",
   "scripts": {
-    "frontend": "cd frontend && bun run dev",
-    "backend": "cd backend && bun run dev",
-    "dev": "bun run frontend & bun run backend",
-    "build": "bun run build:frontend && bun run build:backend",
-    "build:frontend": "cd frontend && bun run build",
-    "build:backend": "cd backend && bun run build",
-    "clean": "rm -rf **/dist && rm -rf **/node_modules",
-    "install:all": "bun install && cd frontend && bun install && cd ../backend && bun install"
+    "dev": "bun run --hot src/index.ts",
+    "start": "bun src/index.ts"
   },
-  "workspaces": [
-    "frontend",
-    "backend"
-  ]
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.705.0",
+    "@hono/oauth-providers": "^0.6.2",
+    "@hono/zod-validator": "^0.4.1",
+    "@oslojs/crypto": "^1.0.1",
+    "@oslojs/encoding": "^1.1.0",
+    "@prisma/client": "^6.0.1",
+    "@prisma/extension-accelerate": "^1.2.1",
+    "@prisma/extension-pulse": "^1.2.0",
+    "hono": "^4.6.13",
+    "luxon": "^3.5.0",
+    "prisma": "^6.0.1",
+    "stripe": "^17.4.0",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@faker-js/faker": "^9.3.0",
+    "@types/bun": "latest",
+    "@types/luxon": "^3.4.2"
+  }
 }

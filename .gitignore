@@ -1,35 +1,15 @@
 # Dependencies
 node_modules/
-**/node_modules/
-.pnp
-.pnp.js
 bun.lockb
-**/bun.lockb
 
 # Build output
 dist/
-**/dist/
 build/
-**/build/
-*.local
 
 # Environment variables
 .env
-.env.*
-!.env.example
-**/.env
-**/.env.*
-!**/.env.example
-
-# Editor directories and files
-.vscode/*
-!.vscode/extensions.json
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.env.local
+.env.*.local
 
 # Logs
 logs/
@@ -40,27 +20,23 @@ yarn-error.log*
 pnpm-debug.log*
 bun-debug.log*
 
-# Testing
-coverage/
-**/coverage/
-/cypress/videos/
-/cypress/screenshots/
+# Editor directories and files
+.vscode/*
+!.vscode/extensions.json
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?
+.DS_Store
 
 # TypeScript
 *.tsbuildinfo
-**/*.tsbuildinfo
 
-# Cache and temporary files
-.cache/
-.temp/
+# Testing
+coverage/
+
+# Temporary files
 .tmp/
-**/dist-ssr/
-.vite/
-
-# OS files
-.DS_Store
-Thumbs.db
-
-# Prisma
-**/prisma/migrations/
-**/prisma/*.db
+.temp/
